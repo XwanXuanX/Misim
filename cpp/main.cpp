@@ -41,7 +41,6 @@ int main() {
 	}
 	std::cout << '\n';
 	std::cout << c.fetch() << ' ' << c.fetch() << '\n';
-	print_ints(c.decode(c.fetch()));
 }
 
 // Basic layout:

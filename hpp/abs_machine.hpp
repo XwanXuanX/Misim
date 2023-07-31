@@ -1064,7 +1064,7 @@ public:
 
 private:
 	// generate ALU input from parsed instruction
-	[[nodiscard]] constexpr auto gen_ALUin(Instr instr) noexcept -> alu_in {
+	[[nodiscard]] constexpr auto gen_ALUin(instruct instr) noexcept -> alu_in {
 
 	}
 
