@@ -422,7 +422,7 @@ public:
 		return gp_[RegName];
 	}
 	// overload 2: const overload
-	[[nodiscard]] constexpr auto GP(std::uint8_t RegName) const noexcept -> const gp_width& {
+	[[nodiscard]] constexpr auto GP(std::uint8_t RegName) const noexcept -> gp_width {
 		return gp_.at(RegName);
 	}
 
@@ -448,6 +448,10 @@ public:
 	// get the value of the PSR
 	[[nodiscard]] constexpr auto get_psr_value() const noexcept -> psr_width {
 		return psr_;
+	}
+	// clear the value of the PSR
+	constexpr auto clear_psr() noexcept -> void {
+		psr_ = static_cast<psr_model>(0x0);
 	}
 
 private:
@@ -500,8 +504,6 @@ struct ALU_in {
 	using op_size = S;
 
 	ALU_OpCode					OpCode_;	// the Opcode the ALU will operate in
-
-	bool						Carryin_;	// operation involves carry in
 	std::pair<op_size, op_size> Ops_;		// A & B two operands
 };
 
@@ -509,10 +511,10 @@ struct ALU_in {
 template <std::unsigned_integral S>
 struct ALU_out {
 	using op_size = S;
+	using flag_type = std::unordered_set<std::uint8_t>;
 
-	std::unordered_set<
-		std::uint8_t>			Flags_;		// The PSR flags the operation produces
-	op_size						Res_;		// The result of the operation
+	flag_type			Flags_;		// The PSR flags the operation produces
+	op_size				Res_;		// The result of the operation
 };
 
 // define special concept used later
@@ -833,7 +835,7 @@ public:
 	Tt			type_;		// opcode type (R I U S J)
 	Ct			code_;		// opcode
 	Rt  Rd_, Rn_, Rm_;		// dest & source registers
-	It			imm_;		// immediate value
+	It			 imm_;		// immediate value
 };
 
 // The main decoder class
@@ -980,7 +982,7 @@ public:
 		}
 		segments_ = std::forward<SG>(seg_config);
 		// configure SP register to the highest addr in the seg
-		registers_.GP(SP) = segments_.at(SS).second;
+		registers_.GP(SP) = segments_.at(SS).second + 1;
 		// configure PC register to the lowest addr in the seg
 		registers_.GP(PC) = segments_.at(CS).first;
 		return true;
@@ -1004,9 +1006,28 @@ public:
 		r_load(segments_.at(DS).first, segments_.at(DS).second, in, ins...);
 	}
 
+	// Core function
+	constexpr auto run() -> void {
+		for (;;) {
+			auto bin = fetch();
+			// terminate condition
+			if (bit_test_all(bin)) {
+				break;
+			}
+			instruct inst = decoder::decode(bin);
+			// treat jumps
+			if (check_jump(inst)) {
+				continue;
+			}
+			auto result = execute(inst);
+			mem_access(inst, result);
+		}
+	}
+
+private:
 	// fetch unit
 	[[nodiscard]] constexpr auto fetch() -> sysb {
-		if (!in_range<sysb>(registers_.GP(PC), segments_.at(CS))) {
+		if (!Core::in_range<sysb>(registers_.GP(PC), segments_.at(CS))) {
 			throw std::runtime_error("Error: PC exceeds CS boundary!");
 		}
 		if (auto instr = memory_.read_slot(registers_.GP(PC)); instr.has_value()) {
@@ -1016,56 +1037,147 @@ public:
 		throw std::runtime_error("Error: Failed to read instruction from memory!");
 	}
 
-
-
-
-	//	ADD,		// add two operands			//		ADD  R1, R2, R3/imm		//		R1 <- R2 + R3/imm
-	//	UMUL,		// multiple two operands	//		UMUL R1, R2, R3/imm		//		R1 <- R2 * R3/imm
-	//	UDIV,		// divide two operands		//		UDIV R1, R2, R3/imm		//		R1 <- R2 / R3/imm
-	//	UMOL,		//		op1 % op2			//		UMOL R1, R2, R3/imm		//		R1 <- R2 % R3/imm
-
-	//	AND,		// bitwise And of A & B		//		AND  R1, R2, R3/imm		//		R1 <- R2 & R3/imm
-	//	ORR,		// bitwise Or of A & B		//		ORR  R1, R2, R3/imm		//		R1 <- R2 | R3/imm
-	//	XOR,		// bitwise Xor of A & B		//		XOR  R1, R2, R3/imm		//		R1 <- R2 ^ R3/imm
-	//	SHL,		// logical shift left		//		SHL  R1, R2, R3/imm		//		R1 <- R2 << R3/imm
-	//	SHR,		// logical shift right		//		SHR  R1, R2, R3/imm		//		R1 <- R2 >> R3/imm
-	//	RTL,		// logical rotate left		//		RTL  R1, R2, R3/imm		//		R1 <- R2 <~ R3/imm
-	//	RTR,		// logical rotate right		//		RTR  R1, R2, R3/imm		//		R1 <- R2 ~> R3/imm
-
-	//	NOT,		// comp all the bits		//		NOT  R1, R2				//		R1 <- ~R2
-
-	//	LDR,		// load reg from mem		//		LDR  R1, R2				//		R1 <- [R2]
-	//	STR,		// store reg in mem			//		STR  R1, R2				//		[R1] <- R2
-
-	//	PUSH,		// push reg onto stack		//		PUSH R1					//		[SP - 4] <- R1;
-	//	POP,		// pop top ele into reg		//		POP	 R1					//		R1 <- [SP] + 4
-
-	//	JMP,		//	unconditional jump		//		JMP label				//		N/A
-	//	JZ,			// jump if Z flag is set	//		JZ	label				//		N/A
-	//	JN,			// jump if N flag is set	//		JN	label				//		N/A
-	//	JC,			// jump if C flag is set	//		JC	label				//		N/A
-	//	JV,			// jump if V flag is set	//		JV	label				//		N/A
-	//	JZN			// jump if Z or N is set	//		JZN label				//		N/A
-
-
-
-
-	
-	auto func() {
-		std::vector<sysb> v;
-		for (int i = 0; i < memory_.mem_size; i++) {
-			v.push_back(memory_.read_slot(i).value());
-		}
-		return v;
+	// execute unit
+	[[nodiscard]] constexpr auto execute(const instruct& instr) -> typename alu_out::op_size {
+		alu_out out = alu::exec<typename alu_in::op_size>(gen_ALUIn(instr));
+		update_psr(out.Flags_);
+		return out.Res_;
 	}
 
+	// memory access and write back
+	constexpr auto mem_access(const instruct& instr, sysb v) -> void {
+		switch (instr.code_) {
+		// only LDR, STR, PUSH, and POP will access memory;
+		case LDR: {
+			if (auto m = memory_.read_slot(v); m.has_value()) {
+				registers_.GP(instr.Rd_) = m.value();
+			} else {
+				throw std::runtime_error("Error: Invalid memory access!");
+			}
+			break;
+		} 
+		case STR: {
+			if (!memory_.write_slot(registers_.GP(instr.Rd_), v)) {
+				throw std::runtime_error("Error: Invalid memory access!");
+			}
+			break;
+		}
+		case PUSH: {
+			if (!Core::in_range(v, segments_.at(SS))) {
+				throw std::runtime_error("Error: Stackoverflow!");
+			}
+			memory_.write_slot(registers_.GP(instr.Rd_), v);
+			registers_.GP(SP) = v;
+			break;
+		} 
+		case POP: {
+			if (!Core::in_range(v - 1, segments_.at(SS))) {
+				return;
+			}
+			if (auto m = memory_.read_slot(registers_.GP(SP)); m.has_value()) {
+				registers_.GP(instr.Rd_) = m.value();
+				registers_.GP(SP) = v;
+			} else {
+				throw std::runtime_error("Error: Invalid memory access!");
+			}
+			break;
+		}
+		// for other instructions, "v" is the result that needs to be write back to Rd
+		default: {
+			registers_.GP(instr.Rd_) = v;
+			break;
+		}
+		}
+	}
 
+	// check jump condition before ALU
+	// if is jump instruction, then return true, else return false
+	constexpr auto check_jump(const instruct& ins) -> bool {
+		if (ins.type_ != J_t) {
+			return false;
+		}
+		// lambda function to perform jump
+		auto perform_jump = [this](bool cond, typename registers::gp_width dst)
+			noexcept -> void {
+			if (cond) {
+				registers_.GP(PC) = dst;
+			}
+		};
+		switch (ins.code_) {
+			case JMP:	perform_jump(true,				ins.imm_);		break;
+			case JZ:	perform_jump(registers_.PSR(Z), ins.imm_);		break;
+			case JN:	perform_jump(registers_.PSR(N), ins.imm_);		break;
+			case JC:	perform_jump(registers_.PSR(C), ins.imm_);		break;
+			case JV:	perform_jump(registers_.PSR(V), ins.imm_);		break;
+			case JZN:	perform_jump(registers_.PSR(Z) || 
+									 registers_.PSR(N), ins.imm_);		break;
+			default:	throw std::runtime_error("Error: Unrecoganized instruction type detected!");
+		}
+		return true;
+	}
 
+	// generate alu_in based on the instruction
+	constexpr auto gen_ALUIn(const instruct& ins) const -> alu_in {
+		// J-type instruction should not go through
+		if (ins.type_ == J_t) {
+			throw std::runtime_error("Error: Jump-type instruction fall through!");
+		}
+		// lambda function to help create ALU input for R & I type instruction
+		auto make_ALUIn_RI = [this](const instruct & ins, ALU_OpCode op) -> alu_in {
+			switch (ins.type_) {
+				case R_t:	return make_ALUIn<sysb>(op, registers_.GP(ins.Rm_), registers_.GP(ins.Rn_));
+				case I_t:	return make_ALUIn<sysb>(op, registers_.GP(ins.Rm_), ins.imm_);
+				default:	throw std::runtime_error("Error: Unrecoganized instruction type detected!");
+			}
+			// dummy return value to silent compiler warning
+			return alu_in{};
+		};
+		switch (ins.code_) {
+			// Arithmetic Ops
+			case ADD:		return make_ALUIn_RI(ins, ALU_OpCode::ADD);
+			case UMUL:		return make_ALUIn_RI(ins, ALU_OpCode::UMUL);
+			case UDIV:		return make_ALUIn_RI(ins, ALU_OpCode::UDIV);
+			case UMOL:		return make_ALUIn_RI(ins, ALU_OpCode::UMOL);
+			// Binary Logical Ops
+			case AND:		return make_ALUIn_RI(ins, ALU_OpCode::AND);
+			case ORR:		return make_ALUIn_RI(ins, ALU_OpCode::ORR);
+			case XOR:		return make_ALUIn_RI(ins, ALU_OpCode::XOR);
+			case SHL:		return make_ALUIn_RI(ins, ALU_OpCode::SHL);
+			case SHR:		return make_ALUIn_RI(ins, ALU_OpCode::SHR);
+			case RTL:		return make_ALUIn_RI(ins, ALU_OpCode::RTL);
+			case RTR:		return make_ALUIn_RI(ins, ALU_OpCode::RTR);
+			// Uniary Logical Ops
+			// for uniary operations, only the first operand is used, second is discarded (0x0)
+			case NOT:		return make_ALUIn<sysb>(ALU_OpCode::COMP, registers_.GP(ins.Rm_), 0x0);
+			// Load and Store Ops
+			case LDR:		return make_ALUIn<sysb>(ALU_OpCode::PASS, registers_.GP(ins.Rm_), 0x0);
+			case STR:		return make_ALUIn<sysb>(ALU_OpCode::PASS, registers_.GP(ins.Rm_), 0x0);
+			// Stack Ops
+			case PUSH:		return make_ALUIn<sysb>(ALU_OpCode::ADD, registers_.GP(SP), -1);
+			case POP:		return make_ALUIn<sysb>(ALU_OpCode::ADD, registers_.GP(SP),  1);
+			default:		throw std::runtime_error("Error: Unrecoganized instruction type detected!");
+		}
+		// dummy return value to silent compiler warning
+		return alu_in{};
+	}
 
-private:
-	// generate ALU input from parsed instruction
-	[[nodiscard]] constexpr auto gen_ALUin(instruct instr) noexcept -> alu_in {
+	// helper function to create ALU_in
+	template <std::convertible_to<typename alu_in::op_size> T>
+	inline static constexpr auto make_ALUIn(ALU_OpCode alu_op, T op1, T op2) noexcept
+		-> alu_in {
+		return alu_in{
+			alu_op,
+			{op1, op2}
+		};
+	}
 
+	// set psr flags
+	constexpr auto update_psr(const typename alu_out::flag_type& flags) noexcept -> void {
+		// Note: alu_out::flag_type == unordered_set<std::uint8_t>;
+		registers_.clear_psr();
+		for (auto&& F : flags) {
+			registers_.PSR(F, true);
+		}
 	}
 
 	// I-loader & D-loader helper
@@ -1082,7 +1194,7 @@ private:
 
 	// validate addr with segment size
 	template <std::unsigned_integral T>
-	[[nodiscard]] constexpr auto in_range(T p, const std::pair<T, T>& seg) noexcept -> bool {
+	[[nodiscard]] inline static constexpr auto in_range(T p, const std::pair<T, T>& seg) noexcept -> bool {
 		return p >= seg.first && p <= seg.second;
 	}
 
