@@ -18,6 +18,9 @@
     <ClInclude Include="hpp\abs_machine.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="hpp\utility.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="cpp\main.cpp">
