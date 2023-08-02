@@ -139,7 +139,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="hpp\abs_machine.hpp" />
+    <ClInclude Include="hpp\absm.hpp" />
     <ClInclude Include="hpp\utility.hpp" />
   </ItemGroup>
   <ItemGroup>

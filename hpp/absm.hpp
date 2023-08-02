@@ -967,6 +967,12 @@ public:
 		for (auto&& r : seg_config) {
 			rngs.emplace_back(r.second);
 		}
+		// check if the start and end addr for each segment is in the range
+		if (!std::ranges::all_of(rngs, [this](const value_type& p) -> bool {
+			return p.second >= p.first && (p.second >= 0 && p.second < Core::mem_size);})
+			) {
+			return false;
+		}
 		// sort by starting index
 		std::ranges::sort(rngs, std::ranges::less{}, [](const value_type& r) {return r.first; });
 		for (auto it = rngs.cbegin() + 1; it != rngs.cend(); ++it) {

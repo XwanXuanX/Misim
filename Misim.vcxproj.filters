@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="hpp\abs_machine.hpp">
+    <ClInclude Include="hpp\absm.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="hpp\utility.hpp">
