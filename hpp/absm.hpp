@@ -941,7 +941,7 @@ public:
 	// The main error logging method
 	template <Tracer::LogCriticalLvls lvl, std::derived_from<std::exception> Except>
 	auto log(const std::string_view& msg) -> void {
-		auto get_msg_prefix = [](Tracer::LogCriticalLvls lvl) noexcept -> std::string_view {
+		auto get_msg_prefix = [](Tracer::LogCriticalLvls lvl) -> std::string_view {
 			switch (lvl) {
 				case Tracer::LogCriticalLvls::INFO:		return "INFO: ";
 				case Tracer::LogCriticalLvls::WARNING:	return "WARNING: ";
@@ -950,7 +950,6 @@ public:
 			}
 		};
 		trace_file_ << get_msg_prefix(lvl) << msg << '\n';
-		// throw exception is level is ERROR
 		if (lvl == Tracer::LogCriticalLvls::ERROR) {
 			trace_file_.close();
 			throw Except(msg.data());
@@ -1160,7 +1159,8 @@ public:
 	[[nodiscard]] constexpr explicit Core(SG&& seg_config)
 		: tracer_{nullptr} {
 		if (!this->init(std::forward<SG>(seg_config))) {
-			throw std::runtime_error("Error: Failed to initialize segments!");
+			trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+				"Error: Failed to initialize segments!");
 		}
 	}
 
@@ -1171,7 +1171,8 @@ public:
 		Tracer* tracer
 	) : tracer_{ tracer } {
 		if (!this->init(std::forward<SG>(seg_config))) {
-			throw std::runtime_error("Error: Failed to initialize segments!");
+			trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+				"Error: Failed to initialize segments!");
 		}
 	}
 
@@ -1207,6 +1208,18 @@ public:
 	}
 
 private:
+	// log message and error reporting
+	template <Tracer::LogCriticalLvls lvl, std::derived_from<std::exception> Except>
+	constexpr auto trace_log(const std::string_view& msg) const -> void {
+		if (tracer_ != nullptr) {
+			tracer_->log<lvl, Except>(msg);
+			return;
+		}
+		if (lvl == Tracer::LogCriticalLvls::ERROR) {
+			throw Except(msg.data());
+		}
+	}
+
 	// create trace log
 	constexpr auto generate_trace(sysb bin, instruct& inst) noexcept -> void {
 		if (tracer_ != nullptr) {
@@ -1219,13 +1232,17 @@ private:
 	// fetch unit
 	[[nodiscard]] constexpr auto fetch() -> sysb {
 		if (!Core::in_range<sysb>(registers_.GP(PC), segments_.at(CS))) {
-			throw std::runtime_error("Error: PC exceeds CS boundary!");
+			trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+				"Error: PC exceeds CS boundary!");
 		}
 		if (auto instr = memory_.read_slot(registers_.GP(PC)); instr.has_value()) {
 			++registers_.GP(PC);
 			return instr.value();
 		}
-		throw std::runtime_error("Error: Failed to read instruction from memory!");
+		trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+			"Error: Failed to read instruction from memory!");
+		// dummy return value to silent compiler warning
+		return 0;
 	}
 
 	// execute unit
@@ -1243,19 +1260,21 @@ private:
 			if (auto m = memory_.read_slot(v); m.has_value()) {
 				registers_.GP(instr.Rd_) = m.value();
 			} else {
-				throw std::runtime_error("Error: Invalid memory access!");
+				trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+					"Error: Invalid memory access!");
 			}
 			break;
 		} 
 		case STR: {
 			if (!memory_.write_slot(registers_.GP(instr.Rd_), v)) {
-				throw std::runtime_error("Error: Invalid memory access!");
+				trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+					"Error: Invalid memory access!");
 			}
 			break;
 		}
 		case PUSH: {
 			if (!Core::in_range(v, segments_.at(SS))) {
-				throw std::runtime_error("Error: Stackoverflow!");
+				trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>("Error: Stackoverflow!");
 			}
 			memory_.write_slot(registers_.GP(instr.Rd_), v);
 			registers_.GP(SP) = v;
@@ -1269,7 +1288,7 @@ private:
 				registers_.GP(instr.Rd_) = m.value();
 				registers_.GP(SP) = v;
 			} else {
-				throw std::runtime_error("Error: Invalid memory access!");
+				trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>("Error: Invalid memory access!");
 			}
 			break;
 		}
@@ -1302,7 +1321,8 @@ private:
 			case JV:	perform_jump(registers_.PSR(V), ins.imm_);		break;
 			case JZN:	perform_jump(registers_.PSR(Z) || 
 									 registers_.PSR(N), ins.imm_);		break;
-			default:	throw std::runtime_error("Error: Unrecoganized instruction type detected!");
+			default:	trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+							"Error: Unrecoganized instruction type detected!");
 		}
 		return true;
 	}
@@ -1311,14 +1331,15 @@ private:
 	constexpr auto gen_ALUIn(const instruct& ins) const -> alu_in {
 		// J-type instruction should not go through
 		if (ins.type_ == J_t) {
-			throw std::runtime_error("Error: Jump-type instruction fall through!");
+			trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>("Error: Jump-type instruction fall through!");
 		}
 		// lambda function to help create ALU input for R & I type instruction
 		auto make_ALUIn_RI = [this](const instruct & ins, ALU_OpCode op) -> alu_in {
 			switch (ins.type_) {
 				case R_t:	return make_ALUIn<sysb>(op, registers_.GP(ins.Rm_), registers_.GP(ins.Rn_));
 				case I_t:	return make_ALUIn<sysb>(op, registers_.GP(ins.Rm_), ins.imm_);
-				default:	throw std::runtime_error("Error: Unrecoganized instruction type detected!");
+				default:	trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+								"Error: Unrecoganized instruction type detected!");
 			}
 			// dummy return value to silent compiler warning
 			return alu_in{};
@@ -1346,7 +1367,8 @@ private:
 			// Stack Ops
 			case PUSH:		return make_ALUIn<sysb>(ALU_OpCode::ADD, registers_.GP(SP), -1);
 			case POP:		return make_ALUIn<sysb>(ALU_OpCode::ADD, registers_.GP(SP),  1);
-			default:		throw std::runtime_error("Error: Unrecoganized instruction type detected!");
+			default:		trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+								"Error: Unrecoganized instruction type detected!");
 		}
 		// dummy return value to silent compiler warning
 		return alu_in{};
