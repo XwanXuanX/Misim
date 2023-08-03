@@ -140,7 +140,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="hpp\absm.hpp" />
-    <ClInclude Include="hpp\utility.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="cpp\main.cpp" />

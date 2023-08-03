@@ -7,6 +7,7 @@
 
 
 #include <bit>
+#include <map>
 #include <array>
 #include <utility>
 #include <vector>
@@ -19,10 +20,12 @@
 #include <functional>
 #include <unordered_set>
 #include <unordered_map>
+#include <fstream>
+#include <filesystem>
 
 
 // define bit size of a byte
-constexpr std::uint32_t byte_size = 8;
+static inline constexpr std::uint32_t byte_size = 8;
 
 
 // -------------------------------------------------------
@@ -881,6 +884,164 @@ private:
 
 // -------------------------------------------------------
 // 
+// Tracer
+// 
+// -------------------------------------------------------
+
+
+struct Labels {
+	using gp_trans_t = const std::map<GPReg, std::string_view>;
+	using psr_trans_t = const std::unordered_map<PSRReg, char>;
+	using type_trans_t = const std::unordered_map<OpType, std::string_view>;
+	using code_trans_t = const std::unordered_map<OpCode, std::string_view>;
+	using seg_trans_t = const std::unordered_map<SEGReg, std::string_view>;
+
+	gp_trans_t gp_trans_ = {
+		{R0, "R0"}, {R1, "R1"}, {R2, "R2"}, {R3, "R3"}, {R4, "R4"}, {R5, "R5"}, {R6, "R6"},
+		{R7, "R7"}, {R8, "R8"}, {R9, "R9"}, {R10, "R10"}, {R11, "R11"}, {R12, "R12"},
+		{SP, "SP"}, {LR, "LR"}, {PC, "PC"}
+	};
+	psr_trans_t psr_trans_ = {
+		{N, 'N'}, {Z, 'Z'}, {C, 'C'}, {V, 'V'}
+	};
+	type_trans_t type_trans_ = {
+		{R_t, "R_t"}, {I_t, "I_t"}, {U_t, "U_t"}, {S_t, "S_t"}, {J_t, "J_t"}
+	};
+	code_trans_t code_trans_ = {
+		{ADD, "ADD"}, {UMUL, "UMUL"}, {UDIV, "UDIV"}, {UMOL, "UMOL"},
+		{AND, "AND"}, {ORR, "ORR"}, {XOR, "XOR"}, {SHL, "SHL"}, {SHR, "SHR"}, 
+		{RTL, "RTL"}, {RTR, "RTR"}, {NOT, "NOT"},
+		{LDR, "LDR"}, {STR, "STR"}, {PUSH, "PUSH"}, {POP, "POP"},
+		{JMP, "JMP"}, {JZ, "JZ"}, {JN, "JN"}, {JC, "JC"}, {JV, "JV"}, {JZN, "JZN"}
+	};
+	seg_trans_t seg_trans_ = {
+		{CS, "Code Segment"}, {DS, "Data Segment"}, {SS, "Stack Segment"}, {ES, "Extra Segment"}
+	};
+};
+
+// Tracer class is responsible for recording the state of the CPU after each instruction is executed.
+class Tracer {
+public:
+	// Tracer must be created with a valid file path
+	[[nodiscard]] explicit Tracer(const std::filesystem::path& path) :
+		trace_file_(std::filesystem::absolute(path).c_str()), 
+		inst_count{0}, labels_{} {
+		if (!trace_file_.is_open()) {
+			throw std::filesystem::filesystem_error("Error: Failed to create / open the tracer file!",
+				std::error_code(1, std::system_category()));
+		}
+	}
+
+	enum struct LogCriticalLvls : std::int8_t {
+		INFO,
+		WARNING,
+		ERROR
+	};
+
+	// The main error logging method
+	template <Tracer::LogCriticalLvls lvl, std::derived_from<std::exception> Except>
+	auto log(const std::string_view& msg) -> void {
+		auto get_msg_prefix = [](Tracer::LogCriticalLvls lvl) noexcept -> std::string_view {
+			switch (lvl) {
+				case Tracer::LogCriticalLvls::INFO:		return "INFO: ";
+				case Tracer::LogCriticalLvls::WARNING:	return "WARNING: ";
+				case Tracer::LogCriticalLvls::ERROR:	return "ERROR: ";
+				default: throw std::runtime_error("Error: Unrecoganized log critical level!");
+			}
+		};
+		trace_file_ << get_msg_prefix(lvl) << msg << '\n';
+		// throw exception is level is ERROR
+		if (lvl == Tracer::LogCriticalLvls::ERROR) {
+			trace_file_.close();
+			throw Except(msg.data());
+		}
+	}
+
+	// The main trace logging method
+	template <std::unsigned_integral T, class Ins, class Mem, class Reg, class Seg>
+	auto generate_trace(T binary, const std::add_lvalue_reference_t<Ins> instr,
+		const std::add_lvalue_reference_t<Mem> memory, const std::add_lvalue_reference_t<Reg> registers,
+		const std::add_lvalue_reference_t<Seg> segments) noexcept -> void {
+		// record instruction number
+		trace_file_ << get_heading(binary);
+		trace_file_ << get_instr<Ins>(instr);
+		trace_file_ << get_reg<Reg>(registers);
+		trace_file_ << get_mem<Mem, Seg>(memory, segments);
+		trace_file_ << '\n';
+		++inst_count;
+	}
+
+private:
+	template <class Mem, class Seg>
+	auto get_mem(const std::add_lvalue_reference_t<Mem> mem, const std::add_lvalue_reference_t<Seg> seg)
+		const -> std::string {
+		std::stringstream ss_seg{}, ss_value{};
+		for (const auto& p : seg) {
+			ss_seg << labels_.seg_trans_.at(static_cast<SEGReg>(p.first));
+			for (auto i{ p.second.first }; i <= p.second.second; ++i) {
+				ss_value << static_cast<std::uint32_t>(mem.read_slot(i).value()) << ',';
+			}
+			formatter(ss_seg, ss_value);
+		}
+		return ss_seg.str();
+	}
+
+	template <class Reg>
+	auto get_reg(const std::add_lvalue_reference_t<Reg> regs) const noexcept -> std::string {
+		std::stringstream ss_label{}, ss_value{};
+		std::ranges::for_each(labels_.gp_trans_, [&](const auto p)->void {
+			ss_label << p.second << ','; ss_value << regs.GP(p.first) << ','; });
+		formatter(ss_label, ss_value);
+		std::ranges::for_each(labels_.psr_trans_, [&](const auto p)->void {
+			ss_label << p.second << ','; ss_value << regs.PSR(p.first) << ','; });
+		formatter(ss_label, ss_value);
+		return ss_label.str();
+	}
+
+	static auto formatter(std::stringstream& l, std::stringstream& v) noexcept -> void {
+		l << '\n';
+		v << '\n';
+		l << v.str();
+		v.str(std::string{});
+	}
+
+	template <class Ins>
+	auto get_instr(const std::add_lvalue_reference_t<Ins> inst) const noexcept -> std::string {
+		std::stringstream ss_label{}, ss_value{};
+		const std::array<std::string_view, 6> l{"OpType", "OpCode", "Rd", "Rm", "Rn", "Imm"};
+		std::ranges::for_each(l, [&ss_label](const auto v)->void {ss_label << v << ','; });
+		ss_label << '\n';
+		ss_value << labels_.type_trans_.at(static_cast<OpType>(inst.type_)) << ',';
+		ss_value << labels_.code_trans_.at(static_cast<OpCode>(inst.code_)) << ',';
+		const std::array<typename Ins::Rt, 3> regs{inst.Rd_, inst.Rm_, inst.Rn_};
+		std::ranges::for_each(regs, [this, &ss_value](const auto v)->void {
+			ss_value << labels_.gp_trans_.at(static_cast<GPReg>(v)) << ','; });
+		ss_value << static_cast<std::uint32_t>(inst.imm_) << '\n';
+		ss_label << ss_value.str();
+		return ss_label.str();
+	}
+
+	template <std::unsigned_integral T>
+	static auto get_heading(T binary) noexcept -> std::string {
+		std::stringstream ss;
+		ss << "Instruction #, 0x" << std::setfill('0') << std::setw(sizeof(T) * 2)
+			<< std::hex << binary << '\n';
+		return ss.str();
+	}
+
+private:
+	std::ofstream	trace_file_;
+
+	// instruction counter: count the number of instructions executed
+	std::uint32_t	inst_count;
+
+	// the label class which maps integers to label as strings
+	const Labels	labels_{};
+};
+
+
+// -------------------------------------------------------
+// 
 // CPU Core
 // 
 // -------------------------------------------------------
@@ -994,8 +1155,21 @@ public:
 		return true;
 	}
 
+	// This ctor overload is used when no tracer is provided
 	template <typename SG> requires std::same_as<segment, std::remove_reference_t<SG>>
-	[[nodiscard]] constexpr explicit Core(SG&& seg_config) {
+	[[nodiscard]] constexpr explicit Core(SG&& seg_config)
+		: tracer_{nullptr} {
+		if (!this->init(std::forward<SG>(seg_config))) {
+			throw std::runtime_error("Error: Failed to initialize segments!");
+		}
+	}
+
+	// This ctor overload is used when tracer is provided
+	template <typename SG> requires std::same_as<segment, std::remove_reference_t<SG>>
+	[[nodiscard]] constexpr explicit Core(
+		SG&& seg_config,
+		Tracer* tracer
+	) : tracer_{ tracer } {
 		if (!this->init(std::forward<SG>(seg_config))) {
 			throw std::runtime_error("Error: Failed to initialize segments!");
 		}
@@ -1023,14 +1197,25 @@ public:
 			instruct inst = decoder::decode(bin);
 			// treat jumps
 			if (check_jump(inst)) {
+				generate_trace(bin, inst);
 				continue;
 			}
 			auto result = execute(inst);
 			mem_access(inst, result);
+			generate_trace(bin, inst);
 		}
 	}
 
 private:
+	// create trace log
+	constexpr auto generate_trace(sysb bin, instruct& inst) noexcept -> void {
+		if (tracer_ != nullptr) {
+			tracer_->generate_trace<
+				sysb, instruct, memory, registers, segment
+			>(bin, inst, memory_, registers_, segments_);
+		}
+	}
+
 	// fetch unit
 	[[nodiscard]] constexpr auto fetch() -> sysb {
 		if (!Core::in_range<sysb>(registers_.GP(PC), segments_.at(CS))) {
@@ -1210,4 +1395,7 @@ private:
 
 	// The memory or registers are not aware of memory segmentation
 	segment		segments_{};
+
+	// The tracer pointer is used to record CPU state information
+	Tracer*		tracer_;
 };
