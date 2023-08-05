@@ -975,10 +975,16 @@ public:
 private:
 	template <class Mem, class Seg>
 	auto get_mem(const std::add_lvalue_reference_t<Mem> mem, const std::add_lvalue_reference_t<Seg> seg)
-		const -> std::string {
+		-> std::string {
 		std::stringstream ss_seg{}, ss_value{};
 		for (const auto& p : seg) {
-			ss_seg << labels_.seg_trans_.at(static_cast<SEGReg>(p.first));
+			try {
+				ss_seg << labels_.seg_trans_.at(static_cast<SEGReg>(p.first));
+			}
+			catch (const std::out_of_range&) {
+				Tracer::log<Tracer::LogCriticalLvls::ERROR, std::out_of_range>(
+					"Error: Tracer::seg_trans_ - No corresponding translation!");
+			}
 			for (auto i{ p.second.first }; i <= p.second.second; ++i) {
 				ss_value << static_cast<std::uint32_t>(mem.read_slot(i).value()) << ',';
 			}
@@ -1007,16 +1013,25 @@ private:
 	}
 
 	template <class Ins>
-	auto get_instr(const std::add_lvalue_reference_t<Ins> inst) const noexcept -> std::string {
+	auto get_instr(const std::add_lvalue_reference_t<Ins> inst) -> std::string {
 		std::stringstream ss_label{}, ss_value{};
 		const std::array<std::string_view, 6> l{"OpType", "OpCode", "Rd", "Rm", "Rn", "Imm"};
+		const std::array<typename Ins::Rt, 3> regs{inst.Rd_, inst.Rm_, inst.Rn_};
 		std::ranges::for_each(l, [&ss_label](const auto v)->void {ss_label << v << ','; });
 		ss_label << '\n';
-		ss_value << labels_.type_trans_.at(static_cast<OpType>(inst.type_)) << ',';
-		ss_value << labels_.code_trans_.at(static_cast<OpCode>(inst.code_)) << ',';
-		const std::array<typename Ins::Rt, 3> regs{inst.Rd_, inst.Rm_, inst.Rn_};
-		std::ranges::for_each(regs, [this, &ss_value](const auto v)->void {
-			ss_value << labels_.gp_trans_.at(static_cast<GPReg>(v)) << ','; });
+		try {
+			ss_value << labels_.type_trans_.at(static_cast<OpType>(inst.type_)) << ',';
+			ss_value << labels_.code_trans_.at(static_cast<OpCode>(inst.code_)) << ',';
+			std::ranges::for_each(regs, [this, &ss_value](const auto v)->void {
+				ss_value << labels_.gp_trans_.at(static_cast<GPReg>(v)) << ','; });
+		}
+		catch (const std::out_of_range&) {
+			Tracer::log<Tracer::LogCriticalLvls::ERROR, std::out_of_range>(
+				"Error: Tracer::type_trans_ / Tracer::code_trans_ / Tracer::gp_trans_ "
+				"- No corresponding translation!"
+			);
+		}
+		// immediate value
 		ss_value << static_cast<std::uint32_t>(inst.imm_) << '\n';
 		ss_label << ss_value.str();
 		return ss_label.str();
@@ -1048,25 +1063,43 @@ private:
 // -------------------------------------------------------
 
 
-/*
-* Syscall instruction provides CPU the ability to invoke kernal-level functions,
-* such as printing to terminal or getting user's keyboard inputs.
-* The syscall table should be designed with large flexibility and modularity:
-* The user should have full control in changing the table or define their own.
-*/
+// Syscall instruction provides CPU the ability to invoke kernal-level functions,
+// such as printing to terminal or getting user's keyboard inputs.
+// The syscall table should be designed with large flexibility and modularity:
+// The user should have full control in changing the table or define their own.
 
 struct SyscallTable {
 	template <class Mem, class Reg>
 	inline static const std::unordered_map<std::uint32_t,
 		std::function<void(std::add_lvalue_reference_t<Mem>, std::add_lvalue_reference_t<Reg>)>
 	> syscall_table_ {
-		{
-			0, 
-			[](std::add_lvalue_reference_t<Mem> rm, std::add_lvalue_reference_t<Reg> rr) noexcept -> void {
-				printf("hello world");
-			}
-		}
+		{0, SyscallTable::template welcome<Mem, Reg>},
+		{1, SyscallTable::template console_out<Mem, Reg>}
 	};
+
+private:
+	template <class Mem, class Reg>
+	static constexpr auto welcome(std::add_lvalue_reference_t<Mem>,
+		std::add_lvalue_reference_t<Reg>) noexcept -> void {
+		printf(
+			"Welcome stranger!\n\n"
+			"This is the CPU speaking - I'm glad that you found this eastern egg left by my creator.\n"
+			"If you see this message, it means that you must be browsing through the code or experimenting with me.\n"
+			"I hope you have the same enthusiasm with C++ as my creator does - because enthusiasm is the "
+			"most important thing in the world.\n\n"
+			"Well, wish you a good day. Bye, adios!\n"
+		);
+	}
+
+	/*
+	* Doc-string:
+	* The console_out syscall function 
+	*/
+	template <class Mem, class Reg>
+	static constexpr auto console_out(std::add_lvalue_reference_t<Mem> mem,
+		std::add_lvalue_reference_t<Reg> reg) -> void {
+		printf("%d", mem.read_slot(32).value());
+	}
 };
 
 
@@ -1353,10 +1386,18 @@ private:
 			case JV:	perform_jump(registers_.PSR(V), ins.imm_);		break;
 			case JZN:	perform_jump(registers_.PSR(Z) || 
 									 registers_.PSR(N), ins.imm_);		break;
-			case SYSCALL:
-				syscall::template syscall_table_<Core::memory, Core::registers>.at(
-					static_cast<std::uint32_t>(ins.imm_))(this->memory_, this->registers_);
+			case SYSCALL: {
+				try {
+					syscall::template syscall_table_<Core::memory, Core::registers>.at(
+						static_cast<std::uint32_t>(ins.imm_))
+						(this->memory_, this->registers_);
+				}
+				catch (const std::out_of_range&) {
+					trace_log<Tracer::LogCriticalLvls::ERROR, std::out_of_range>(
+						"Error: Unrecoganized SYSCALL number!");
+				}
 				break;
+			}
 			default:
 				trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
 					"Error: Unrecoganized instruction type detected!");
