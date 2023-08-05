@@ -25,7 +25,7 @@ int main() {
 
 	const std::pair<int, int>& a = v;
 	
-	using core = Core<std::uint32_t, 50>;
+	using core = Core<std::uint32_t, 50, SyscallTable>;
 	core::segment seg = {
 		{DS, std::make_pair(31, 47)},
 		{ES, std::make_pair(48, 48)},
@@ -51,6 +51,7 @@ int main() {
 		0x000010e3,
 		0x000000f3,
 		0x000010f3,
+		0x00000164,
 		0xffffffff
 	);
 	c.run();

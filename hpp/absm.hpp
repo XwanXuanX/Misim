@@ -768,7 +768,9 @@ enum OpCode : std::uint8_t {
 	JN,			// jump if N flag is set	//		JN	label				//		N/A
 	JC,			// jump if C flag is set	//		JC	label				//		N/A
 	JV,			// jump if V flag is set	//		JV	label				//		N/A
-	JZN			// jump if Z or N is set	//		JZN label				//		N/A
+	JZN,		// jump if Z or N is set	//		JZN label				//		N/A
+
+	SYSCALL		// invokes system calls		//		SYSCALL 1				//		N/A
 };
 
 // Encoding rules
@@ -912,7 +914,7 @@ struct Labels {
 		{AND, "AND"}, {ORR, "ORR"}, {XOR, "XOR"}, {SHL, "SHL"}, {SHR, "SHR"}, 
 		{RTL, "RTL"}, {RTR, "RTR"}, {NOT, "NOT"},
 		{LDR, "LDR"}, {STR, "STR"}, {PUSH, "PUSH"}, {POP, "POP"},
-		{JMP, "JMP"}, {JZ, "JZ"}, {JN, "JN"}, {JC, "JC"}, {JV, "JV"}, {JZN, "JZN"}
+		{JMP, "JMP"}, {JZ, "JZ"}, {JN, "JN"}, {JC, "JC"}, {JV, "JV"}, {JZN, "JZN"}, {SYSCALL, "SYSCALL"}
 	};
 	seg_trans_t seg_trans_ = {
 		{CS, "Code Segment"}, {DS, "Data Segment"}, {SS, "Stack Segment"}, {ES, "Extra Segment"}
@@ -1041,6 +1043,35 @@ private:
 
 // -------------------------------------------------------
 // 
+// Syscall table
+// 
+// -------------------------------------------------------
+
+
+/*
+* Syscall instruction provides CPU the ability to invoke kernal-level functions,
+* such as printing to terminal or getting user's keyboard inputs.
+* The syscall table should be designed with large flexibility and modularity:
+* The user should have full control in changing the table or define their own.
+*/
+
+struct SyscallTable {
+	template <class Mem, class Reg>
+	inline static const std::unordered_map<std::uint32_t,
+		std::function<void(std::add_lvalue_reference_t<Mem>, std::add_lvalue_reference_t<Reg>)>
+	> syscall_table_ {
+		{
+			0, 
+			[](std::add_lvalue_reference_t<Mem> rm, std::add_lvalue_reference_t<Reg> rr) noexcept -> void {
+				printf("hello world");
+			}
+		}
+	};
+};
+
+
+// -------------------------------------------------------
+// 
 // CPU Core
 // 
 // -------------------------------------------------------
@@ -1061,7 +1092,7 @@ private:
 template <typename Sy, typename T, typename... Ts>
 concept is_valid_data = std::convertible_to<T, Sy> && (std::same_as<T, Ts> || ...);
 
-template <std::unsigned_integral B, std::size_t S>
+template <std::unsigned_integral B, std::size_t S, class SysT>
 class Core {
 public:
 	using sysb = B;						// system bit
@@ -1080,6 +1111,7 @@ public:
 
 	// helper definition
 	using segment = std::unordered_map<SEGReg, std::pair<sysb, sysb>>;
+	using syscall = SysT;
 
 	// memory layout
 	/*
@@ -1321,8 +1353,14 @@ private:
 			case JV:	perform_jump(registers_.PSR(V), ins.imm_);		break;
 			case JZN:	perform_jump(registers_.PSR(Z) || 
 									 registers_.PSR(N), ins.imm_);		break;
-			default:	trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-							"Error: Unrecoganized instruction type detected!");
+			case SYSCALL:
+				syscall::template syscall_table_<Core::memory, Core::registers>.at(
+					static_cast<std::uint32_t>(ins.imm_))(this->memory_, this->registers_);
+				break;
+			default:
+				trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+					"Error: Unrecoganized instruction type detected!");
+				break;
 		}
 		return true;
 	}
