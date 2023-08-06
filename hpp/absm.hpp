@@ -21,6 +21,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <fstream>
+#include <iostream>
 #include <filesystem>
 
 
@@ -1060,13 +1061,11 @@ private:
 // 
 // Syscall table
 // 
-// -------------------------------------------------------
-
-
 // Syscall instruction provides CPU the ability to invoke kernal-level functions,
 // such as printing to terminal or getting user's keyboard inputs.
-// The syscall table should be designed with large flexibility and modularity:
-// The user should have full control in changing the table or define their own.
+// 
+// -------------------------------------------------------
+
 
 struct SyscallTable {
 	template <class Mem, class Reg>
@@ -1074,13 +1073,13 @@ struct SyscallTable {
 		std::function<void(std::add_lvalue_reference_t<Mem>, std::add_lvalue_reference_t<Reg>)>
 	> syscall_table_ {
 		{0, SyscallTable::template welcome<Mem, Reg>},
-		{1, SyscallTable::template console_out<Mem, Reg>}
+		{1, SyscallTable::template console_out<Mem, Reg>},
+		{2, SyscallTable::template console_in<Mem, Reg>}
 	};
 
 private:
 	template <class Mem, class Reg>
-	static constexpr auto welcome(std::add_lvalue_reference_t<Mem>,
-		std::add_lvalue_reference_t<Reg>) noexcept -> void {
+	static constexpr auto welcome(std::add_lvalue_reference_t<Mem>, std::add_lvalue_reference_t<Reg>) noexcept -> void {
 		printf(
 			"Welcome stranger!\n\n"
 			"This is the CPU speaking - I'm glad that you found this eastern egg left by my creator.\n"
@@ -1093,12 +1092,52 @@ private:
 
 	/*
 	* Doc-string:
-	* The console_out syscall function 
+	* The console_out() function allow user to print text on terminal.
+	* @inputs:
+	*	- R0: the starting addr of a contigious memory (string) that will be displayed;
+	*	- R1: the length of contigious memory;
+	* @outputs:
+	*	- None
 	*/
 	template <class Mem, class Reg>
-	static constexpr auto console_out(std::add_lvalue_reference_t<Mem> mem,
-		std::add_lvalue_reference_t<Reg> reg) -> void {
-		printf("%d", mem.read_slot(32).value());
+	static auto console_out(std::add_lvalue_reference_t<Mem> mem, std::add_lvalue_reference_t<Reg> reg) -> void {
+		std::string tmp;
+		tmp.reserve(reg.GP(R1));
+		for (auto i{ reg.GP(R0) }; i < (reg.GP(R0) + reg.GP(R1)); ++i) {
+			if (auto op = mem.read_slot(i); op.has_value()) {
+				tmp.push_back(op.value());
+			} else {
+				throw std::out_of_range("Error: Memory access out of range!");
+			}
+		}
+		// print out the content of tmp
+		std::cout << tmp;
+	}
+
+	/*
+	* Doc-string:
+	* The console_in() function allow user to input string with keyboard.
+	* @inputs:
+	*	- R0: the starting addr of a contigious memory that will be filled;
+	*	- R1: the length of contigious memory;
+	* @outputs:
+	*	- User input string will be placed in the contigious memory. All spaces will be rewritten.
+	*	  Thus please make sure to save necessary contents on the stack before doing the operation.
+	*/
+	template <class Mem, class Reg>
+	static auto console_in(std::add_lvalue_reference_t<Mem> mem, std::add_lvalue_reference_t<Reg> reg) -> void {
+		std::string tmp;
+		std::getline(std::cin, tmp);
+		if (tmp.length() > reg.GP(R1)) {
+			throw std::length_error("Error: User-input string exceeds maximum space length!");
+		}
+		// place the string sequentially into memory
+		std::ranges::for_each(tmp,
+			[idx = reg.GP(R0), &mem](auto ch) mutable noexcept -> void {
+				mem.write_slot(ch, idx);
+				++idx;
+			}
+		);
 	}
 };
 
