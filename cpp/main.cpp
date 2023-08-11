@@ -1,4 +1,4 @@
-#include "absm.hpp"
+#include "tema.hpp"
 
 int main() {
 	std::cout << std::hex;
@@ -37,15 +37,15 @@ int main() {
 	c.run();
 }
 
-//R_t,		// R_type ==> 2 source registers, 1 dest registers, no imm; Binary operations
+// R_t,		// R_type ==> 2 source registers, 1 dest registers, no imm; Binary operations
 // 
-//I_t,		// I_type ==> 1 source register, 1 dest register, 1 imm; Binary operations, with imm
+// I_t,		// I_type ==> 1 source register, 1 dest register, 1 imm; Binary operations, with imm
 // 
-//U_t,		// U_type ==> 1 source register, 1 dest register, 0 imm; Unary operations
+// U_t,		// U_type ==> 1 source register, 1 dest register, 0 imm; Unary operations
 // 
-//S_t,		// S_type ==> 0 source register, 1 dest register, 0 imm (only for stack operations)
+// S_t,		// S_type ==> 0 source register, 1 dest register, 0 imm (only for stack operations)
 // 
-//J_t		// J_type ==> 0 source register, 0 dest register 1 imm (only for branching)
+// J_t		// J_type ==> 0 source register, 0 dest register 1 imm (only for branching)
 
 
 // Opcode	//		Explanation			//		Example					//		Semantics

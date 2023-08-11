@@ -11,19 +11,27 @@
 * 2. Introduce memory page and processes;
 * 3. Still single-core CPU, but with multiple processes.
 * 
+* All classes should be prefixed with MP (Multiple Processes).
+* 
 * God bless me.
 */
 
 
 // import absm.hpp to include all necessary headers
-#include "absm.hpp"
+#include "overture.hpp"
 #include <span>
 
 
+/**
+* MPMemory:
+* Wrapper class of std::array
+* Process should not access or modify main memory directly - should access via Page
+*/
+template <std::unsigned_integral T, std::size_t S>
+class MPMemory {
 
-//// define bit size of a byte
-//static inline constexpr std::uint32_t byte_size = 8;
-//
+};
+
 //struct Memory {
 //	std::array<int, 100> mem_;
 //};
