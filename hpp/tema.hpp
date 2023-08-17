@@ -129,7 +129,6 @@ namespace misim::freefuncs
         }
 
         const auto mask = (static_cast<std::uintmax_t>(1) << n_size) - 1;
-
         return (n & mask) == mask;
     }
 
@@ -149,7 +148,6 @@ namespace misim::freefuncs
         }
 
         const auto mask = (static_cast<std::uintmax_t>(1) << (last_nbit + 1)) - 1;
-
         return (n & mask) == mask;
     }
 
@@ -177,7 +175,6 @@ namespace misim::freefuncs
         }
 
         const auto mask = (static_cast<std::uintmax_t>(1) << (last_nbit + 1)) - 1;
-
         return static_cast<bool>(n & mask);
     }
 
@@ -234,15 +231,15 @@ namespace misim::freefuncs
     }
 
 
-    template <class... Poses>
-    concept ValidPoses = (std::same_as<std::size_t, Poses> || ...);
+    template <typename... Poses>
+    concept valid_positions = (std::same_as<std::size_t, Poses> || ...);
 
 
     constexpr auto
     setBit(
         std::unsigned_integral auto&            n,
         const std::same_as<std::size_t> auto    position,
-        const ValidPoses auto...                positions
+        const valid_positions auto...           positions
     ) noexcept
         -> std::expected<void, std::domain_error>
     {
@@ -310,7 +307,7 @@ namespace misim::freefuncs
     resetBit(
         std::unsigned_integral auto&            n,
         const std::same_as<std::size_t> auto    position,
-        const ValidPoses auto...                positions
+        const valid_positions auto...           positions
     ) noexcept
         -> std::expected<void, std::domain_error>
     {
@@ -372,7 +369,7 @@ namespace misim::freefuncs
     flipBit(
         std::unsigned_integral auto&            n,
         const std::same_as<std::size_t> auto    position,
-        const ValidPoses auto...                positions
+        const valid_positions auto...           positions
     ) noexcept
         -> std::expected<void, std::domain_error>
     {
@@ -435,120 +432,197 @@ namespace misim::freefuncs
 }
 
 
+namespace misim::page
+{
+    template <typename SourceType, typename DestType>
+    concept valid_forwarding_reference_type = requires
+    {
+        std::same_as<
+            std::remove_reference_t<SourceType>, 
+            std::remove_reference_t<DestType>
+        >
+        && std::is_constructible_v<DestType, SourceType>;
+    };
 
 
+    template <
+        std::unsigned_integral Width,
+        std::size_t            Size
+    >
+    class Page
+    {
+    public:
+        using page_width_type = Width;
+        using size_type       = std::size_t;
+        using page_model_type = std::array<page_width_type, Size>;
 
+        const size_type m_page_size  = Size;
+        const size_type m_page_width = sizeof(page_width_type) * CHAR_BIT;
 
-//namespace misim::page {
-//  template <std::unsigned_integral width, std::size_t size>
-//  class Page {
-//  public:
-//    using page_width = width;
-//    using size_type = std::size_t;
-//    const std::size_t page_size = size;
-//    using page_model = std::array<page_width, size>;
-//
-//    _NODISCARD constexpr explicit Page() = default;
-//
-//    template <class Array>
-//      requires (std::same_as<page_model, std::remove_reference_t<Array>> and std::is_constructible_v<page_model, Array>)
-//    _NODISCARD constexpr explicit Page(Array&& array, const bool in_memory, const size_type start_addr, const class Process* pMaster)
-//      noexcept (std::is_nothrow_constructible_v<page_model, Array>) :
-//      page_{ std::forward<Array>(array) }, in_memory_{ in_memory }, start_addr_{ start_addr }, pMaster_{ pMaster } {}
-//
-//    _NODISCARD constexpr auto CheckAddrInrange(const size_type addr) noexcept -> bool {
-//      return addr >= start_addr_ and addr < (start_addr_ + page_size);
-//    }
-//
-//    // modify
-//    constexpr auto Write(const page_width data, const size_type addr) noexcept -> std::expected<void, std::domain_error> {
-//      if (not CheckAddrInrange(addr))
-//        return std::unexpected(std::domain_error("Address out of bound."));
-//      page_[addr - start_addr_] = std::move(data);
-//      return std::expected<void, std::domain_error>{};
-//    }
-//
-//    // access
-//    _NODISCARD constexpr auto Read(const size_type addr) noexcept -> std::expected<page_width, std::domain_error> {
-//      if (not CheckAddrInrange(addr))
-//        return std::unexpected(std::domain_error("Address out of bound."));
-//      return page_.at(addr - start_addr_);
-//    }
-//
-//    // clear
-//    constexpr auto Clear() noexcept -> void { page_.fill(static_cast<page_width>(0x0)); }
-//
-//    // clear
-//    constexpr auto Clear(const size_type begin, decltype(begin) end) noexcept -> std::expected<void, std::domain_error> {
-//      using return_t = std::expected<void, std::domain_error>;
-//      if (begin == start_addr_ and end == (start_addr_ + page_size - 1)) {
-//        Clear();
-//        return return_t{};
-//      }
-//      if (not CheckAddrInrange(begin) or not CheckAddrInrange(end))
-//        return std::unexpected(std::domain_error("Address out of bound."));
-//      for (size_type i = begin; i <= end; ++i)
-//        page_[i - start_addr_] = static_cast<page_width>(0x0);
-//      return return_t{};
-//    }
-//
-//
-//
-//
-//
-//
-//  private:
-//    page_model		page_{};
-//    bool			in_memory_{};
-//    size_type		start_addr_{};
-//
-//    class Process*	pMaster_{};
-//  };
-//}
-//
-//
+    public:
+        [[nodiscard]] constexpr explicit
+        Page() = default;
 
+        template <valid_forwarding_reference_type<page_model_type> Array>
+        [[nodiscard]] constexpr explicit
+        Page(
+            Array&& page,
+            const bool           in_memory,
+            const size_type      start_address,
+            const class Process* master_ptr
+        )
+            : m_page          { std::forward<Array>(page) }
+            , m_in_memory     { in_memory       }
+            , m_start_address { start_address   }
+            , m_master_ptr    { master_ptr      }
+        {
+        }
 
+    public:
+        [[nodiscard]] constexpr inline auto
+        checkAddressInrange(const size_type address) noexcept
+            -> bool
+        {
+            return (
+                address >= m_start_address
+                && address < (m_start_address + m_page_size)
+            );
+        }
 
-  //// return page width in # bits
-  //NODISCARD constexpr auto get_page_width() const noexcept -> std::size_t { return sizeof(page_width) * CHAR_BIT; }
+        constexpr auto
+        write(
+            const page_width_type data,
+            const size_type       address
+        ) noexcept
+            -> std::expected<void, std::domain_error>
+        {
+            if (!checkAddressInrange(address)) {
+                return std::unexpected(
+                    std::domain_error("Address out of bound.")
+                );
+            }
 
-  //// return page size in length
-  //NODISCARD constexpr auto get_page_size() const noexcept -> size_type { return page_.max_size(); }
+            m_page[address - m_start_address] = std::move(data);
 
-  //// get start address
-  //NODISCARD constexpr auto get_start_addr() const noexcept -> size_type { return start_addr_; }
+            return {};
+        }
 
-  //// set start address
-  //constexpr void set_start_addr(const size_type start_addr) noexcept { start_addr_ = start_addr; }
+        [[nodiscard]] constexpr auto
+        read(const size_type address) noexcept
+            -> std::expected<page_width_type, std::domain_error>
+        {
+            if (!checkAddressInrange(address)) {
+                return std::unexpected(
+                    std::domain_error("Address out of bound.")
+                );
+            }
 
-  //// get in memory
-  //NODISCARD constexpr bool in_memory() const noexcept { return in_memory_; }
+            return m_page.at(address - m_start_address);
+        }
 
-  //// set in memory
-  //constexpr void set_in_memory(const bool in) noexcept { in_memory_ = in; }
+        constexpr inline auto
+        clear() noexcept
+            -> void
+        {
+            m_page.fill(0x0);
+        }
 
-  //// get owning process ptr
-  //NODISCARD constexpr auto get_pMaster() const noexcept -> class Process* { return pMaster_; }
+        constexpr auto
+        clear(
+            const size_type begin,
+            const size_type end
+        ) noexcept
+            -> std::expected<void, std::domain_error>
+        {
+            if (
+                begin == m_start_address
+                && end == (m_start_address + m_page_size - 1)
+                )
+            {
+                clear();
+                return {};
+            }
 
-  //// set owning process ptr
-  //constexpr void set_pMaster(const class Process* p_master) noexcept { pMaster_ = p_master; }
+            if (
+                !checkAddressInrange(begin)
+                || !checkAddressInrange(end)
+                )
+            {
+                return std::unexpected(
+                    std::domain_error("Address out of bound.")
+                );
+            }
 
+            for (size_type i{ begin }; i <= end; ++i) {
+                m_page[i - m_start_address] = 0x0;
+            }
 
-// -------------------------------------------------------
-// 
-// MainMemory (Thread-safe)
-// 
-// -------------------------------------------------------
+            return {};
+        }
 
+    public:
+        [[nodiscard]] constexpr inline auto
+        getPageWidth() const noexcept
+            -> std::size_t
+        {
+            return m_page_width;
+        }
 
-/**
-* Design explanation:
-* 
-* Main memory is consists of an array of Pages. That is, memory OWNs Pages.
-* Processes needs to request page from memory and borrow it. After the process is finished,
-* pages will be released and returned to the memory.
-*/
+        [[nodiscard]] constexpr inline auto
+        getPageSize() const noexcept
+            -> size_type
+        {
+            return m_page.max_size();
+        }
 
+        [[nodiscard]] constexpr inline auto
+        getStartAddress() const noexcept
+            -> size_type
+        {
+            return m_start_address;
+        }
 
+        constexpr inline auto
+        setStartAddress(const size_type start_address) noexcept
+            -> void
+        {
+            m_start_address = start_address;
+        }
 
+        [[nodiscard]] constexpr inline auto
+        getInMemory() const noexcept
+            -> bool
+        {
+            return m_in_memory;
+        }
+
+        constexpr inline auto
+        setInMemory(bool in_memory) noexcept
+            -> void
+        {
+            m_in_memory = in_memory;
+        }
+
+        [[nodiscard]] constexpr inline auto
+        getMasterPtr() const noexcept
+            -> class Process*
+        {
+            return m_master_ptr;
+        }
+
+        constexpr inline auto
+        setMasterPtr(const class Process* master_ptr) noexcept
+            -> void
+        {
+            m_master_ptr = master_ptr;
+        }
+
+    private:
+        page_model_type m_page{};
+
+        bool            m_in_memory{};
+        size_type       m_start_address{};
+
+        class Process*  m_master_ptr{};
+    };
+}
