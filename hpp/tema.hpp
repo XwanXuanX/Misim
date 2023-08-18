@@ -55,6 +55,7 @@
 #include <array>
 #include <vector>
 #include <cstdint>
+#include <cassert>
 #include <utility>
 #include <numeric>
 #include <climits>
@@ -72,29 +73,22 @@
 
 namespace misim::freefuncs
 {
-    template <std::unsigned_integral uint>
-    [[nodiscard]] constexpr auto
-    checkBitInrange(const std::size_t position) noexcept
+    template <std::unsigned_integral uint> [[nodiscard]] static inline constexpr
+    auto checkBitInrange(const std::size_t position) noexcept
         -> bool
     {
-        return (
-            position >= 0
-            && position < sizeof(uint) * CHAR_BIT
-        );
+        return position >= 0 && position < sizeof(uint) * CHAR_BIT;
     }
 
-
-    [[nodiscard]] constexpr auto
-    checkBitInrange(const std::unsigned_integral auto n, const std::size_t position) noexcept
+    [[nodiscard]] static inline constexpr
+    auto checkBitInrange(const std::unsigned_integral auto n, const std::size_t position) noexcept
         -> bool
     {
         return freefuncs::checkBitInrange<decltype(n)>(position);
     }
 
-
-    template <std::unsigned_integral uint>
-    [[nodiscard]] constexpr auto
-    testBit(const uint n, const std::size_t position) noexcept
+    template <std::unsigned_integral uint> [[nodiscard]] static constexpr
+    auto testBit(const uint n, const std::size_t position) noexcept
         -> std::expected<bool, std::domain_error>
     {
         if (!freefuncs::checkBitInrange(n, position)) {
@@ -102,19 +96,16 @@ namespace misim::freefuncs
                 std::domain_error("Bit position out of bound.")
             );
         }
-
         return n & (static_cast<uint>(1) << position);
     }
-    
-    
-    [[nodiscard]] constexpr auto
-    testBitAll(const std::unsigned_integral auto n) noexcept
+
+    [[nodiscard]] static constexpr
+    auto testBitAll(const std::unsigned_integral auto n) noexcept
         -> std::expected<bool, std::domain_error>
     {
         const std::size_t n_size = sizeof(n) * CHAR_BIT - 1;
 
-        if (sizeof(n) == sizeof(std::uintmax_t))
-        {
+        if (sizeof(n) == sizeof(std::uintmax_t)) {
             using return_t = std::expected<bool, std::domain_error>;
             if (
                 const return_t result = freefuncs::testBit(n, n_size);
@@ -127,14 +118,12 @@ namespace misim::freefuncs
                 return result;
             }
         }
-
         const auto mask = (static_cast<std::uintmax_t>(1) << n_size) - 1;
         return (n & mask) == mask;
     }
 
-
-    [[nodiscard]] constexpr auto
-    testBitAll(const std::unsigned_integral auto n, const std::size_t last_nbit) noexcept
+    [[nodiscard]] static constexpr
+    auto testBitAll(const std::unsigned_integral auto n, const std::size_t last_nbit) noexcept
         -> std::expected<bool, std::domain_error>
     {
         if (!freefuncs::checkBitInrange(n, last_nbit)) {
@@ -142,26 +131,22 @@ namespace misim::freefuncs
                 std::domain_error("Last nbits out of bound.")
             );
         }
-
         if (!freefuncs::checkBitInrange(n, last_nbit + 1)) {
             return freefuncs::testBitAll(n);
         }
-
         const auto mask = (static_cast<std::uintmax_t>(1) << (last_nbit + 1)) - 1;
         return (n & mask) == mask;
     }
 
-
-    [[nodiscard]] constexpr auto
-    testBitAny(const std::unsigned_integral auto n) noexcept
+    [[nodiscard]] static inline constexpr
+    auto testBitAny(const std::unsigned_integral auto n) noexcept
         -> bool
     {
         return static_cast<bool>(n);
     }
 
-
-    [[nodiscard]] constexpr auto
-    testBitAny(const std::unsigned_integral auto n, const std::size_t last_nbit) noexcept
+    [[nodiscard]] static constexpr
+    auto testBitAny(const std::unsigned_integral auto n, const std::size_t last_nbit) noexcept
         -> std::expected<bool, std::domain_error>
     {
         if (!freefuncs::checkBitInrange(n, last_nbit)) {
@@ -169,26 +154,22 @@ namespace misim::freefuncs
                 std::domain_error("Last nbits out of bound.")
             );
         }
-
         if (!freefuncs::checkBitInrange(n, last_nbit + 1)) {
             return freefuncs::testBitAny(n);
         }
-
         const auto mask = (static_cast<std::uintmax_t>(1) << (last_nbit + 1)) - 1;
         return static_cast<bool>(n & mask);
     }
 
-
-    [[nodiscard]] constexpr auto
-    testBitNone(const std::unsigned_integral auto n) noexcept
+    [[nodiscard]] static inline constexpr
+    auto testBitNone(const std::unsigned_integral auto n) noexcept
         -> bool
     {
         return !freefuncs::testBitAny(n);
     }
 
-        
-    [[nodiscard]] constexpr auto
-    testBitNone(const std::unsigned_integral auto n, const std::size_t last_nbit) noexcept
+    [[nodiscard]] static constexpr
+    auto testBitNone(const std::unsigned_integral auto n, const std::size_t last_nbit) noexcept
         -> std::expected<bool, std::domain_error>
     {
         using return_t = std::expected<bool, std::domain_error>;
@@ -204,10 +185,8 @@ namespace misim::freefuncs
         }
     }
 
-
-    template <std::unsigned_integral uint>
-    constexpr auto
-    setBit(uint& n, const std::size_t position) noexcept
+    template <std::unsigned_integral uint> static constexpr
+    auto setBit(uint& n, const std::size_t position) noexcept
         -> std::expected<void, std::domain_error>
     {
         if (!freefuncs::checkBitInrange<uint>(position)) {
@@ -215,32 +194,23 @@ namespace misim::freefuncs
                 std::domain_error("Bit position out of bound.")
             );
         }
-
         n |= (static_cast<uint>(1) << position);
         return {};
     }
 
-
-    template <std::unsigned_integral uint>
-    constexpr auto
-    setBit(uint& n) noexcept
+    template <std::unsigned_integral uint> static inline constexpr
+    auto setBit(uint& n) noexcept
         -> std::expected<void, std::domain_error>
     {
         n |= static_cast<uint>(-1);
         return {};
     }
 
-
     template <typename... Poses>
     concept valid_positions = (std::same_as<std::size_t, Poses> || ...);
 
-
-    constexpr auto
-    setBit(
-        std::unsigned_integral auto&            n,
-        const std::same_as<std::size_t> auto    position,
-        const valid_positions auto...           positions
-    ) noexcept
+    static constexpr
+    auto setBit(std::unsigned_integral auto& n, const std::same_as<std::size_t> auto position, const valid_positions auto... positions) noexcept
         -> std::expected<void, std::domain_error>
     {
         using return_t = std::expected<void, std::domain_error>;
@@ -253,18 +223,14 @@ namespace misim::freefuncs
         }
 
         return_t result;
-
         if constexpr (sizeof...(positions) > 0) {
             result = freefuncs::setBit(n, positions...);
         }
-
         return result;
     }
 
-
-    template <std::unsigned_integral uint>
-    constexpr auto
-    resetBit(uint& n, const std::size_t position) noexcept
+    template <std::unsigned_integral uint> static constexpr
+    auto resetBit(uint& n, const std::size_t position) noexcept
         -> std::expected<void, std::domain_error>
     {
         if (!freefuncs::checkBitInrange<uint>(position)) {
@@ -272,9 +238,7 @@ namespace misim::freefuncs
                 std::domain_error("Bit position out of bound.")
             );
         }
-
         using return_t = std::expected<bool, std::domain_error>;
-
         if (
             const return_t result = freefuncs::testBit<uint>(n, position);
             !result
@@ -287,32 +251,23 @@ namespace misim::freefuncs
         else if (!*result) {
             return {};
         }
-
         n ^= (static_cast<uint>(1) << position);
-
         return {};
     }
 
-
-    inline constexpr auto
-    resetBit(std::unsigned_integral auto& n) noexcept
+    static inline constexpr
+    auto resetBit(std::unsigned_integral auto& n) noexcept
         -> std::expected<void, std::domain_error>
     {
         n &= 0x0;
         return {};
     }
 
-
-    constexpr auto
-    resetBit(
-        std::unsigned_integral auto&            n,
-        const std::same_as<std::size_t> auto    position,
-        const valid_positions auto...           positions
-    ) noexcept
+    static constexpr
+    auto resetBit(std::unsigned_integral auto& n, const std::same_as<std::size_t> auto position, const valid_positions auto... positions) noexcept
         -> std::expected<void, std::domain_error>
     {
         using return_t = std::expected<void, std::domain_error>;
-
         if (
             const return_t result = freefuncs::resetBit(n, position);
             !result
@@ -322,26 +277,21 @@ namespace misim::freefuncs
         }
 
         return_t result;
-
         if constexpr (sizeof...(positions) > 0) {
             result = freefuncs::resetBit(n, positions...);
         }
-
         return result;
     }
 
-
-    [[nodiscard]] inline constexpr auto
-    pos(const std::unsigned_integral auto position) noexcept
+    [[nodiscard]] static inline constexpr
+    auto pos(const std::unsigned_integral auto position) noexcept
         -> std::size_t
     {
         return static_cast<std::size_t>(position);
     }
 
-
-    template <std::unsigned_integral uint>
-    constexpr auto
-    flipBit(uint& n, const std::size_t position) noexcept
+    template <std::unsigned_integral uint> static constexpr
+    auto flipBit(uint& n, const std::size_t position) noexcept
         -> std::expected<void, std::domain_error>
     {
         if (!freefuncs::checkBitInrange<uint>(position)) {
@@ -349,32 +299,23 @@ namespace misim::freefuncs
                 std::domain_error("Bit position out of bound.")
             );
         }
-
         n ^= (static_cast<uint>(1) << position);
-
         return {};
     }
 
-
-    inline constexpr auto
-    flipBit(std::unsigned_integral auto& n) noexcept
+    static inline constexpr
+    auto flipBit(std::unsigned_integral auto& n) noexcept
         -> std::expected<void, std::domain_error>
     {
         n = ~n;
         return {};
     }
 
-
-    constexpr auto
-    flipBit(
-        std::unsigned_integral auto&            n,
-        const std::same_as<std::size_t> auto    position,
-        const valid_positions auto...           positions
-    ) noexcept
+    static constexpr
+    auto flipBit(std::unsigned_integral auto& n, const std::same_as<std::size_t> auto position, const valid_positions auto... positions) noexcept
         -> std::expected<void, std::domain_error>
     {
         using return_t = std::expected<void, std::domain_error>;
-
         if (
             const return_t result = freefuncs::flipBit(n, position);
             !result
@@ -384,14 +325,11 @@ namespace misim::freefuncs
         }
 
         return_t result;
-
         if constexpr (sizeof...(positions) > 0) {
             result = freefuncs::flipBit(n, positions...);
         }
-
         return result;
     }
-
 
     /**
      * The solution to solve problem with multiply invokes undefined behaviour
@@ -408,7 +346,6 @@ namespace misim::freefuncs
      *  After the operation is done, truncated the result to original size.
      */
 
-
     template <std::unsigned_integral uint>
     struct MakePromoted
     {
@@ -416,15 +353,12 @@ namespace misim::freefuncs
 
         using type = std::conditional_t<small, std::uint32_t, uint>;
     };
-
-
+   
     template <typename T>
     using make_promoted_t = typename MakePromoted<T>::type;
 
-
-    template <typename T>
-    [[nodiscard]] inline constexpr auto
-    promote(const T n) noexcept
+    template <typename T> [[nodiscard]] static inline constexpr
+    auto promote(const T n) noexcept
         -> make_promoted_t<T>
     {
         return n;
@@ -438,17 +372,13 @@ namespace misim::page
     concept valid_forwarding_reference_type = requires
     {
         std::same_as<
-            std::remove_reference_t<SourceType>, 
+            std::remove_reference_t<SourceType>,
             std::remove_reference_t<DestType>
         >
         && std::is_constructible_v<DestType, SourceType>;
     };
 
-
-    template <
-        std::unsigned_integral Width,
-        std::size_t            Size
-    >
+    template <std::unsigned_integral Width, std::size_t Size>
     class Page
     {
     public:
@@ -463,24 +393,18 @@ namespace misim::page
         [[nodiscard]] constexpr explicit
         Page() = default;
 
-        template <valid_forwarding_reference_type<page_model_type> Array>
-        [[nodiscard]] constexpr explicit
-        Page(
-            Array&& page,
-            const bool           in_memory,
-            const size_type      start_address,
-            const class Process* master_ptr
-        )
+        template <valid_forwarding_reference_type<page_model_type> Array> [[nodiscard]] constexpr explicit
+        Page(Array&& page, const bool in_memory, const size_type start_address, const class Process* master_ptr)
             : m_page          { std::forward<Array>(page) }
-            , m_in_memory     { in_memory       }
-            , m_start_address { start_address   }
-            , m_master_ptr    { master_ptr      }
+            , m_in_memory     { in_memory     }
+            , m_start_address { start_address }
+            , m_master_ptr    { master_ptr    }
         {
         }
 
     public:
-        [[nodiscard]] constexpr inline auto
-        checkAddressInrange(const size_type address) noexcept
+        [[nodiscard]] inline constexpr
+        auto checkAddressInrange(const size_type address) noexcept
             -> bool
         {
             return (
@@ -489,11 +413,8 @@ namespace misim::page
             );
         }
 
-        constexpr auto
-        write(
-            const page_width_type data,
-            const size_type       address
-        ) noexcept
+        constexpr
+        auto write(const page_width_type data, const size_type address) noexcept
             -> std::expected<void, std::domain_error>
         {
             if (!checkAddressInrange(address)) {
@@ -501,14 +422,12 @@ namespace misim::page
                     std::domain_error("Address out of bound.")
                 );
             }
-
             m_page[address - m_start_address] = std::move(data);
-
             return {};
         }
 
-        [[nodiscard]] constexpr auto
-        read(const size_type address) noexcept
+        [[nodiscard]] constexpr
+        auto read(const size_type address) noexcept
             -> std::expected<page_width_type, std::domain_error>
         {
             if (!checkAddressInrange(address)) {
@@ -516,38 +435,28 @@ namespace misim::page
                     std::domain_error("Address out of bound.")
                 );
             }
-
             return m_page.at(address - m_start_address);
         }
-
-        constexpr inline auto
-        clear() noexcept
+        
+        constexpr inline
+        auto clear() noexcept
             -> void
         {
             m_page.fill(0x0);
         }
 
-        constexpr auto
-        clear(
-            const size_type begin,
-            const size_type end
-        ) noexcept
+        constexpr
+        auto clear(const size_type begin, const size_type end) noexcept
             -> std::expected<void, std::domain_error>
         {
             if (
                 begin == m_start_address
                 && end == (m_start_address + m_page_size - 1)
-                )
-            {
+            ) {
                 clear();
                 return {};
             }
-
-            if (
-                !checkAddressInrange(begin)
-                || !checkAddressInrange(end)
-                )
-            {
+            if (!checkAddressInrange(begin) || !checkAddressInrange(end)) {
                 return std::unexpected(
                     std::domain_error("Address out of bound.")
                 );
@@ -556,64 +465,51 @@ namespace misim::page
             for (size_type i{ begin }; i <= end; ++i) {
                 m_page[i - m_start_address] = 0x0;
             }
-
             return {};
         }
 
     public:
-        [[nodiscard]] constexpr inline auto
-        getPageWidth() const noexcept
-            -> std::size_t
-        {
-            return m_page_width;
-        }
-
-        [[nodiscard]] constexpr inline auto
-        getPageSize() const noexcept
-            -> size_type
-        {
-            return m_page.max_size();
-        }
-
-        [[nodiscard]] constexpr inline auto
-        getStartAddress() const noexcept
+        [[nodiscard]] inline constexpr
+        auto getStartAddress() const noexcept
             -> size_type
         {
             return m_start_address;
         }
 
-        constexpr inline auto
-        setStartAddress(const size_type start_address) noexcept
+        inline constexpr
+        auto setStartAddress(const size_type start_address)
             -> void
         {
+            assert(start_address >= 0);
             m_start_address = start_address;
         }
 
-        [[nodiscard]] constexpr inline auto
-        getInMemory() const noexcept
+        [[nodiscard]] inline constexpr
+        auto getInMemory() const noexcept
             -> bool
         {
             return m_in_memory;
         }
-
-        constexpr inline auto
-        setInMemory(bool in_memory) noexcept
+        
+        inline constexpr
+        auto setInMemory(const bool in_memory) noexcept
             -> void
         {
             m_in_memory = in_memory;
         }
 
-        [[nodiscard]] constexpr inline auto
-        getMasterPtr() const noexcept
+        [[nodiscard]] 
+        auto getMasterPtr() const noexcept
             -> class Process*
         {
             return m_master_ptr;
         }
 
-        constexpr inline auto
-        setMasterPtr(const class Process* master_ptr) noexcept
+        inline constexpr
+        auto setMasterPtr(const class Process* master_ptr)
             -> void
         {
+            assert(master_ptr != nullptr);
             m_master_ptr = master_ptr;
         }
 
