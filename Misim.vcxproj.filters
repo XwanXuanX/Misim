@@ -31,6 +31,7 @@
     <None Include=".gitattributes" />
     <None Include=".gitignore" />
     <None Include="UML\architechture.drawio" />
+    <None Include="style.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="LICENSE.txt" />

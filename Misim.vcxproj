@@ -148,6 +148,7 @@
   <ItemGroup>
     <None Include=".gitattributes" />
     <None Include=".gitignore" />
+    <None Include="style.md" />
     <None Include="UML\architechture.drawio" />
   </ItemGroup>
   <ItemGroup>
