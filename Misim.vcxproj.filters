@@ -30,6 +30,7 @@
   <ItemGroup>
     <None Include=".gitattributes" />
     <None Include=".gitignore" />
+    <None Include="UML\architechture.drawio" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="LICENSE.txt" />

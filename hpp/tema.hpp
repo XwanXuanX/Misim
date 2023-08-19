@@ -207,7 +207,10 @@ namespace misim::freefuncs
     }
 
     template <typename... Poses>
-    concept valid_positions = (std::same_as<std::size_t, Poses> || ...);
+    concept valid_positions = requires
+    {
+        (std::same_as<std::size_t, Poses> || ...);
+    };
 
     static constexpr
     auto setBit(std::unsigned_integral auto& n, const std::same_as<std::size_t> auto position, const valid_positions auto... positions) noexcept
