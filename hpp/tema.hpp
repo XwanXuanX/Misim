@@ -214,7 +214,9 @@ namespace misim::freefuncs
     };
 
     static constexpr
-    auto setBit(std::unsigned_integral auto& n, const std::same_as<std::size_t> auto position, const valid_positions auto... positions) noexcept
+    auto setBit(std::unsigned_integral auto&         n       ,
+                const std::same_as<std::size_t> auto position,
+                const valid_positions auto...        positions) noexcept
         -> std::expected<void, std::domain_error>
     {
         using return_t = std::expected<void, std::domain_error>;
@@ -268,7 +270,9 @@ namespace misim::freefuncs
     }
 
     static constexpr
-    auto resetBit(std::unsigned_integral auto& n, const std::same_as<std::size_t> auto position, const valid_positions auto... positions) noexcept
+    auto resetBit(std::unsigned_integral auto&         n       ,
+                  const std::same_as<std::size_t> auto position,
+                  const valid_positions auto...        positions) noexcept
         -> std::expected<void, std::domain_error>
     {
         using return_t = std::expected<void, std::domain_error>;
@@ -316,7 +320,9 @@ namespace misim::freefuncs
     }
 
     static constexpr
-    auto flipBit(std::unsigned_integral auto& n, const std::same_as<std::size_t> auto position, const valid_positions auto... positions) noexcept
+    auto flipBit(std::unsigned_integral auto&         n       ,
+                 const std::same_as<std::size_t> auto position,
+                 const valid_positions auto...        positions) noexcept
         -> std::expected<void, std::domain_error>
     {
         using return_t = std::expected<void, std::domain_error>;
