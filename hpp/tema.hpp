@@ -209,6 +209,7 @@ namespace misim::freefuncs
     template <typename... Poses>
     concept valid_positions = requires
     {
+        requires
         (std::same_as<std::size_t, Poses> || ...);
     };
 
@@ -374,11 +375,13 @@ namespace misim::page
     template <typename SourceType, typename DestType>
     concept valid_forwarding_reference_type = requires
     {
+        requires
         std::same_as<
             std::remove_reference_t<SourceType>,
             std::remove_reference_t<DestType>
-        >
-        && std::is_constructible_v<DestType, SourceType>;
+        >;
+        requires
+        std::is_constructible_v<DestType, SourceType>;
     };
 
     template <std::unsigned_integral Width, std::size_t Size>
