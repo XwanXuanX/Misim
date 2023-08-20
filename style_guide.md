@@ -89,8 +89,25 @@
         return static_cast<std::size_t>(position);
     }
     ```
+    ```cpp
+    template <a_very_very_long_concept_name    Array    ,
+              another_long_concept_name<Array> HashTable,
+              a_short_concept_name             Memory    > [[nodiscard]] inline constexpr
+    auto aVeryVeryLongFunctionName(const std::string& my_str    ,
+                                   HashTable&&        hash_table,
+                                   Memory&&           memory     ) const noexcept &&
+        -> my_namespace::my_custom_type
+    {
+        /* function-body */
+    }
+    ```
 #### Explanation
 * First line consists of explicit template declaration, attributes, and specifiers;
 * Second line consists of `auto` which symbolizes start of function declaration, function name, parameter list, more specifiers and qualifiers;
 * Third line consists of `->` which introduces the return type;
-* f
+* Forth line should and only should consists of one `{` which introduces the function body;
+* Last line should and only should consists of the ending `}`;
+* In case of very long template declaration or parameter list, each parameter should be split into their own line;
+* If parameters are split, type names should be aligned, parameter names should be aligned, and commas should be aligned;
+* The closing bracket (`>` or `)`) should be aligned with commas, but one space to the right;
+* Attributes, qualifiers, and specifiers should follow immediately after the closing brackets;
