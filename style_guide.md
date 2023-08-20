@@ -93,4 +93,4 @@
 * First line consists of explicit template declaration, attributes, and specifiers;
 * Second line consists of `auto` which symbolizes start of function declaration, function name, parameter list, more specifiers and qualifiers;
 * Third line consists of `->` which introduces the return type;
-* 
+* f
