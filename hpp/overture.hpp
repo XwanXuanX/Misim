@@ -1,801 +1,926 @@
-/*
-* Assembly Abstract Machine
-*
-* A very simple, non-pipelined conceptual model of processor,
-* that runs my own instruction set.
-*/
+/*********************************************************************
+ *
+ *  @file   overture.hpp
+ *  @brief  Assembly Abstract machine (Ver.1)
+ *
+ *  @author Tony (Yetong) Li
+ *  @date   August 2023
+ *
+ *  @detail
+ *
+ *	Assembly Abstract Machine.
+ * 
+ *	A very simple, non-pipelined conceptual model of processor,
+ *	that runs my own instruction set.
+ *
+ *********************************************************************/
 
 
 #include <bit>
 #include <map>
 #include <array>
-#include <utility>
 #include <vector>
 #include <cstdint>
+#include <cassert>
+#include <utility>
 #include <numeric>
+#include <climits>
+#include <fstream>
+#include <iostream>
 #include <concepts>
-#include <optional>
+#include <expected>
 #include <algorithm>
 #include <stdexcept>
 #include <functional>
+#include <filesystem>
 #include <unordered_set>
 #include <unordered_map>
-#include <fstream>
-#include <iostream>
-#include <filesystem>
 
 
-// define bit size of a byte
-static inline constexpr std::uint32_t byte_size = 8;
+namespace scsp::memory
+{
+    template <std::unsigned_integral Width, std::size_t Size>
+    class Memory
+    {
+    public:
+        using memory_width_type = Width;
+        using memory_size_type  = std::size_t;
+        using memory_model_type = std::array<memory_width_type, Size>;
 
+    public:
+        const memory_size_type m_memory_size  = Size;
+        const memory_size_type m_memory_width = sizeof(memory_width_type) * CHAR_BIT;
 
-// -------------------------------------------------------
-//
-// Memory
-// 
-// -------------------------------------------------------
+    public:
+        [[nodiscard]] constexpr explicit
+        Memory() = default;
 
+    public:
+        [[nodiscard]] inline constexpr
+        auto checkAddressInrange(const memory_size_type address) noexcept
+            -> bool
+        {
+            return address >= 0 && address < m_memory_size;
+        }
 
-template <std::unsigned_integral T, std::size_t S>
-class memory {
-public:
-	using mem_width = T;
-	using size_type = std::size_t;
-	const size_type mem_size = S;
-	using memory_model = std::array<mem_width, S>;
+        constexpr
+        auto write(const memory_width_type data, const memory_size_type address) noexcept
+            -> std::expected<void, std::domain_error>
+        {
+            if (!checkAddressInrange(address)) {
+                return std::unexpected(
+                    std::domain_error("Address out of range.")
+                );
+            }
+            m_memory[address] = std::move(data);
+            return {};
+        }
 
-	// fource compiler generate default constructor
-	[[nodiscard]] constexpr explicit memory() = default;
+        [[nodiscard]] constexpr
+        auto read(const memory_size_type address) noexcept
+            -> std::expected<memory_width_type, std::domain_error>
+        {
+            if (!checkAddressInrange(address)) {
+                return std::unexpected(
+                    std::domain_error("Address out of range.")
+                );
+            }
+            return m_memory.at(address);
+        }
 
-	// mutator: modify data in one mem slot
-	constexpr auto write_slot(mem_width slot_data, size_type addr) noexcept -> bool {
-		if (addr < 0 || addr >= mem_size) {
-			return false;
-		}
-		mem_[addr] = std::move(slot_data);
-		return true;
-	}
+        constexpr inline
+        auto clear() noexcept
+            -> void
+        {
+            m_memory.fill(0x0);
+        }
 
-	// accessor: read data in one mem slot
-	[[nodiscard]] constexpr auto read_slot(size_type addr) noexcept -> std::optional<mem_width> {
-		if (addr < 0 || addr >= mem_size) {
-			return std::nullopt;
-		}
-		return mem_.at(addr);
-	}
+        constexpr
+        auto clear(const memory_size_type begin, const memory_size_type end) noexcept
+            -> std::expected<void, std::domain_error>
+        {
+            if (begin == 0 && end == m_memory_size - 1) {
+                clear();
+                return {};
+            }
+            if (!checkAddressInrange(begin) || !checkAddressInrange(end)) {
+                return std::unexpected(
+                    std::domain_error("Address out of range.")
+                );
+            }
 
-	// mutator: reset (clear) mem slots to NULL
-	// overload 1: clear whole range
-	constexpr auto clear_mem() noexcept -> bool {
-		mem_.fill(static_cast<mem_width>(0x0));
-		return true;
-	}
-	// overload 2: clear sub-region
-	constexpr auto clear_mem(size_type begin_addr, size_type end_addr) noexcept -> bool {
-		// if whole range, delegate to overload 1
-		if (begin_addr == 0 && end_addr == mem_size - 1) {
-			return clear_mem();
-		}
-		auto inrange = [end = mem_size](const auto& addr) -> bool {
-			return addr >= 0 && addr < end;
-		};
-		if (!inrange(begin_addr) || !inrange(end_addr)) {
-			return false;
-		}
-		for (; begin_addr <= end_addr; ++begin_addr) {
-			mem_[begin_addr] = 0x0;
-		}
-		return true;
-	}
-	// overload 3: reset (clear) several mem slots to NULL (1 or more)
-	template <typename T, typename... Args>
-		requires std::same_as<T, size_type> && (std::same_as<T, Args> || ...)
-	constexpr auto clear_mem(T slot, Args... slots) noexcept -> bool {
-		bool succeed = write_slot(static_cast<mem_width>(0x0), slot);
-		if constexpr (sizeof...(slots) > 0) {
-			succeed &= clear_mem(slots...);
-		}
-		return succeed;
-	}
+            for (memory_size_type i{ begin }; i <= end; ++i) {
+                m_memory[i] = 0x0;
+            }
+            return {};
+        }
 
-	// accessor: return memory width in # bits
-	[[nodiscard]] constexpr auto get_mem_nbit() const noexcept -> std::uint32_t {
-		return sizeof(mem_width) * byte_size;
-	}
-
-	// accessor: return memory size in length
-	[[nodiscard]] constexpr auto get_mem_size() const noexcept -> size_type {
-		return mem_.max_size();
-	}
-
-private:
-	memory_model mem_{};
-};
-
-
-// -------------------------------------------------------
-//
-// Free functions
-// 
-// -------------------------------------------------------
-
-
-// one can simply use <bit> stl.
-// here implement some necessary operations that <bit> does not have
-
-// bit in range: test if the given bit position is within the range
-// NOTE: POS is the index of the bit, from 0, start from right (least significant)
-template <std::unsigned_integral Int>
-[[nodiscard]] constexpr auto bit_inrange(const std::size_t pos) noexcept -> bool {
-	return pos >= 0 && pos < sizeof(Int) * byte_size;
-}
-
-// bit test: test if a bit is set to true
-// NOTE: POS is the index of the bit, from 0, start from right (least significant)
-template <std::unsigned_integral Int>
-[[nodiscard]] constexpr auto bit_test(Int n, std::size_t pos) noexcept -> bool {
-	if (!bit_inrange<Int>(pos)) {
-		return false;
-	}
-	// 1 << pos ==> 0b0000 0001 -> 0b0010 0000
-	// n & (1 << pos) ==> 0b0101 1101 & 0b0010 0000 -> 0b0000 0000 -> false
-	return n & (static_cast<Int>(1) << pos);
-}
-
-// bit_test_all: test if all the bit is set to true
-// NOTE: last_nbit is the number of bits to be tested, start from right (least significant)
-// overload 1: entire range
-template <std::unsigned_integral Int>
-[[nodiscard]] constexpr auto bit_test_all(Int n) noexcept -> bool {
-	std::size_t last_nbit{ sizeof(Int)* byte_size - 1 };
-	bool res{ true };
-	// prevent from overflow
-	if (sizeof(Int) == sizeof(std::uintmax_t)) {
-		res &= bit_test<Int>(n, last_nbit);	// check the highest bit
-		n >>= 1;		// move the bits down by 1
-		--last_nbit;	// dec the check range
-	}
-	const Int mask{ (static_cast<std::uintmax_t>(1) << (last_nbit + 1)) - 1 };
-	n &= mask;
-	return n == mask && res;
-}
-// overload 2: user provided range
-template <std::unsigned_integral Int>
-[[nodiscard]] constexpr auto bit_test_all(Int n, std::size_t last_nbit) noexcept -> bool {
-	if (!bit_inrange<Int>(last_nbit)) {
-		return false;
-	}
-	// if check whole range, delegate to overload 1
-	if (!bit_inrange<Int>(last_nbit + 1)) {
-		return bit_test_all<Int>(n);
-	}
-	// not whole range, no need to worry about overflow
-	// (1 << (last_nbit + 1)) - 1 ==> 0b0001 -> 0b0000 - 1 -> 0b1111 for last_nbit = 3
-	// n &= mask ==> 0b1101 & 0b1111 -> 0b1101 / 0b1111 & 0b1111 / 0b0000 & 0b1111 -> 0b0000
-	const Int mask{ (static_cast<std::uintmax_t>(1) << (last_nbit + 1)) - 1 };
-	n &= mask;
-	return n == mask;
-}
-
-// bit_test_any: test if any bits are set to true
-// NOTE: last_nbit is the number of bits to be tested, start from right (least significant)
-// overload 1: entire range
-template <std::unsigned_integral Int>
-[[nodiscard]] constexpr auto bit_test_any(Int n) noexcept -> bool {
-	return static_cast<bool>(n);
-}
-// overload 2: user provided range
-template <std::unsigned_integral Int>
-[[nodiscard]] constexpr auto bit_test_any(Int n, std::size_t last_nbit) noexcept -> bool {
-	if (!bit_inrange<Int>(last_nbit)) {
-		return false;
-	}
-	// if testing for the whole interval, delegate to overload 1
-	if (!bit_inrange<Int>(last_nbit + 1)) {
-		return bit_test_any<Int>(n);
-	}
-	// not whole range, not need to worry about overflow
-	const Int mask{ (static_cast<std::uintmax_t>(1) << (last_nbit + 1)) - 1 };
-	n &= mask;
-	return static_cast<bool>(n);
-}
-
-// bit_test_none: test if none of the bits are set
-// NOTE: last_nbit is the number of bits to be tested, start from right (least significant)
-// overload 1: entire range
-template <std::unsigned_integral Int>
-[[nodiscard]] constexpr auto bit_test_none(Int n) noexcept -> bool {
-	return !bit_test_any<Int>(n);
-}
-// overload 2: user provided range
-template <std::unsigned_integral Int>
-[[nodiscard]] constexpr auto bit_test_none(Int n, std::size_t last_nbit) noexcept -> bool {
-	return !bit_test_any<Int>(n, last_nbit);
-}
-
-// bit_set: set bits to true
-// NOTE: POS is the index of the bit, from 0, start from right (least significant)
-// overload 1: user provided location
-template <std::unsigned_integral Int>
-[[nodiscard]] constexpr auto bit_set(Int n, const std::size_t pos) noexcept -> std::optional<Int> {
-	if (!bit_inrange<Int>(pos)) {
-		return std::nullopt;
-	}
-	return n | (static_cast<Int>(1) << pos);
-}
-// overload 2: entire range
-template <std::unsigned_integral Int>
-[[nodiscard]] constexpr auto bit_set(Int n) noexcept -> std::optional<Int> {
-	return n | static_cast<Int>(-1);
-}
-// helper validate concept
-template <typename P, typename... Ps>
-concept is_valid_poses = std::same_as<P, std::size_t> && (std::same_as<P, Ps> || ...);
-// overload 3: user provide multiple location
-template <typename Int, typename P, typename... Ps>
-	requires std::unsigned_integral<Int>&& is_valid_poses<P, Ps...>
-[[nodiscard]] constexpr auto bit_set(Int n, P pos, Ps... poses) noexcept -> std::optional<Int> {
-	std::optional<Int> res{bit_set<Int>(n, pos)};
-	if (!res.has_value()) {
-		return res;
-	}
-	if constexpr (sizeof...(poses) > 0) {
-		res = bit_set(res.value(), poses...);
-	}
-	return res;
-}
-
-// bit_reset: set bits to false
-// NOTE: POS is the index of the bit, from 0, start from right (least significant)
-// overload 1: user provided location
-template <std::unsigned_integral Int>
-[[nodiscard]] constexpr auto bit_reset(Int n, const std::size_t pos) noexcept -> std::optional<Int> {
-	if (!bit_inrange<Int>(pos)) {
-		return std::nullopt;
-	}
-	// check if the bit is already false
-	if (!bit_test<Int>(n, pos)) {
-		return n;
-	}
-	// otherwise need to use xor to toggle the bit
-	return n ^ (static_cast<Int>(1) << pos);
-}
-// overload 2: entire range
-template <std::unsigned_integral Int>
-[[nodiscard]] constexpr auto bit_reset(Int n) noexcept -> std::optional<Int> {
-	return n & static_cast<Int>(0x0);
-}
-// overload 3: user provide multiple location
-template <typename Int, typename P, typename... Ps>
-	requires std::unsigned_integral<Int>&& is_valid_poses<P, Ps...>
-[[nodiscard]] constexpr auto bit_reset(Int n, P pos, Ps... poses) noexcept -> std::optional<Int> {
-	std::optional<Int> res{bit_reset<Int>(n, pos)};
-	if (!res.has_value()) {
-		return res;
-	}
-	if constexpr (sizeof...(poses) > 0) {
-		res = bit_reset(res.value(), poses...);
-	}
-	return res;
-}
-
-// utility function: change all integral type to std::size_t for use in POS
-template <std::unsigned_integral Int>
-[[nodiscard]] constexpr auto pos(Int n) noexcept -> std::size_t {
-	return static_cast<std::size_t>(n);
-}
-
-// bit_flip: flip bits to their opposite
-// NOTE: POS is the index of the bit, from 0, start from right (least significant)
-// overload 1: user provided location
-template <std::unsigned_integral Int>
-[[nodiscard]] constexpr auto bit_flip(Int n, const std::size_t pos) noexcept -> std::optional<Int> {
-	if (!bit_inrange<Int>(pos)) {
-		return std::nullopt;
-	}
-	return n ^ (static_cast<Int>(1) << pos);
-}
-// overload 2: entire ranges
-template <std::unsigned_integral Int>
-[[nodiscard]] constexpr auto bit_flip(Int n) noexcept -> std::optional<Int> {
-	return ~n;
-}
-// overload 3: user provided multiple ranges
-template <typename Int, typename P, typename... Ps>
-	requires std::unsigned_integral<Int>&& is_valid_poses<P, Ps...>
-[[nodiscard]] constexpr auto bit_flip(Int n, P pos, Ps... poses) noexcept -> std::optional<Int> {
-	std::optional<Int> res{bit_flip<Int>(n, pos)};
-	if (!res.has_value()) {
-		return res;
-	}
-	if constexpr (sizeof...(poses) > 0) {
-		res = bit_flip(res.value(), poses...);
-	}
-	return res;
-}
-
-// The solution to solve problem with multiply invokes undefined behaviour
-// Explanation:
-// Define A & B be unsigned integers, whose size less than signed int (normally 32bits)
-// If the product of A * B overflows, A & B will be promoted to signed int and multiply.
-// However, if the result overflows, signed int will invoke undefined behaviour.
-// Solution:
-// Use template method to let unsigned integers only promote to unsigned int.
-// After the operation is done, truncated the result to original size.
-
-template <std::unsigned_integral T>
-struct make_promoted;
-
-// unsigned integers will be promoted to "unsigned int" or to themselves,
-// if their rank is already greater or equal to the rank of "unsigned int".
-template <std::unsigned_integral T>
-struct make_promoted {
-	static constexpr auto small = sizeof(T) < sizeof(unsigned int);
-	using type = std::conditional_t<small, unsigned int, T>;
-};
-
-template <class T>
-using make_promoted_t = typename make_promoted<T>::type;
-
-// helper function
-template <class T>
-[[nodiscard]] constexpr auto promote(T v) noexcept -> make_promoted_t<T> {
-	return v;
+    private:
+        memory_model_type m_memory{};
+    };
 }
 
 
-// -------------------------------------------------------
-//
-// Register file
-// 
-// -------------------------------------------------------
+namespace scsp::freefuncs
+{
+    template <std::unsigned_integral uint> [[nodiscard]] static inline constexpr
+    auto checkBitInrange(const std::size_t position) noexcept
+        -> bool
+    {
+        return position >= 0 && position < sizeof(uint) * CHAR_BIT;
+    }
+
+    [[nodiscard]] static inline constexpr
+    auto checkBitInrange(const std::unsigned_integral auto n, const std::size_t position) noexcept
+        -> bool
+    {
+        return freefuncs::checkBitInrange<decltype(n)>(position);
+    }
+
+    template <std::unsigned_integral uint> [[nodiscard]] static constexpr
+    auto testBit(const uint n, const std::size_t position) noexcept
+        -> std::expected<bool, std::domain_error>
+    {
+        if (!freefuncs::checkBitInrange(n, position)) {
+            return std::unexpected(
+                std::domain_error("Bit position out of bound.")
+            );
+        }
+        return n & (static_cast<uint>(1) << position);
+    }
+
+    [[nodiscard]] static constexpr
+    auto testBitAll(const std::unsigned_integral auto n) noexcept
+        -> std::expected<bool, std::domain_error>
+    {
+        const std::size_t n_size = sizeof(n) * CHAR_BIT - 1;
+
+        if (sizeof(n) == sizeof(std::uintmax_t)) {
+            using return_t = std::expected<bool, std::domain_error>;
+            if (
+                const return_t result = freefuncs::testBit(n, n_size);
+                result && !*result
+                )
+            {
+                return false;
+            }
+            else if (!result) {
+                return result;
+            }
+        }
+        const auto mask = (static_cast<std::uintmax_t>(1) << n_size) - 1;
+        return (n & mask) == mask;
+    }
+
+    [[nodiscard]] static constexpr
+    auto testBitAll(const std::unsigned_integral auto n, const std::size_t last_nbit) noexcept
+        -> std::expected<bool, std::domain_error>
+    {
+        if (!freefuncs::checkBitInrange(n, last_nbit)) {
+            return std::unexpected(
+                std::domain_error("Last nbits out of bound.")
+            );
+        }
+        if (!freefuncs::checkBitInrange(n, last_nbit + 1)) {
+            return freefuncs::testBitAll(n);
+        }
+        const auto mask = (static_cast<std::uintmax_t>(1) << (last_nbit + 1)) - 1;
+        return (n & mask) == mask;
+    }
+
+    [[nodiscard]] static inline constexpr
+    auto testBitAny(const std::unsigned_integral auto n) noexcept
+        -> bool
+    {
+        return static_cast<bool>(n);
+    }
+
+    [[nodiscard]] static constexpr
+    auto testBitAny(const std::unsigned_integral auto n, const std::size_t last_nbit) noexcept
+        -> std::expected<bool, std::domain_error>
+    {
+        if (!freefuncs::checkBitInrange(n, last_nbit)) {
+            return std::unexpected(
+                std::domain_error("Last nbits out of bound.")
+            );
+        }
+        if (!freefuncs::checkBitInrange(n, last_nbit + 1)) {
+            return freefuncs::testBitAny(n);
+        }
+        const auto mask = (static_cast<std::uintmax_t>(1) << (last_nbit + 1)) - 1;
+        return static_cast<bool>(n & mask);
+    }
+
+    [[nodiscard]] static inline constexpr
+    auto testBitNone(const std::unsigned_integral auto n) noexcept
+        -> bool
+    {
+        return !freefuncs::testBitAny(n);
+    }
+
+    [[nodiscard]] static constexpr
+    auto testBitNone(const std::unsigned_integral auto n, const std::size_t last_nbit) noexcept
+        -> std::expected<bool, std::domain_error>
+    {
+        using return_t = std::expected<bool, std::domain_error>;
+        if (
+            const return_t result = freefuncs::testBitAny(n, last_nbit);
+            result
+            )
+        {
+            return !*result;
+        }
+        else {
+            return result;
+        }
+    }
+
+    template <std::unsigned_integral uint> static constexpr
+    auto setBit(uint& n, const std::size_t position) noexcept
+        -> std::expected<void, std::domain_error>
+    {
+        if (!freefuncs::checkBitInrange<uint>(position)) {
+            return std::unexpected(
+                std::domain_error("Bit position out of bound.")
+            );
+        }
+        n |= (static_cast<uint>(1) << position);
+        return {};
+    }
+
+    template <std::unsigned_integral uint> static inline constexpr
+    auto setBit(uint& n) noexcept
+        -> std::expected<void, std::domain_error>
+    {
+        n |= static_cast<uint>(-1);
+        return {};
+    }
+
+    template <typename... Poses>
+    concept valid_positions = requires
+    {
+        requires
+        (std::same_as<std::size_t, Poses> || ...);
+    };
+
+    static constexpr
+    auto setBit(std::unsigned_integral auto&         n       ,
+                const std::same_as<std::size_t> auto position,
+                const valid_positions auto...        positions) noexcept
+        -> std::expected<void, std::domain_error>
+    {
+        using return_t = std::expected<void, std::domain_error>;
+        if (
+            const return_t result = freefuncs::setBit(n, position);
+            !result
+            )
+        {
+            return result;
+        }
+
+        return_t result;
+        if constexpr (sizeof...(positions) > 0) {
+            result = freefuncs::setBit(n, positions...);
+        }
+        return result;
+    }
+
+    template <std::unsigned_integral uint> static constexpr
+    auto resetBit(uint& n, const std::size_t position) noexcept
+        -> std::expected<void, std::domain_error>
+    {
+        if (!freefuncs::checkBitInrange<uint>(position)) {
+            return std::unexpected(
+                std::domain_error("Bit position out of bound.")
+            );
+        }
+        using return_t = std::expected<bool, std::domain_error>;
+        if (
+            const return_t result = freefuncs::testBit<uint>(n, position);
+            !result
+            )
+        {
+            return std::unexpected(
+                std::domain_error("freefunc::TestBit function failed.")
+            );
+        }
+        else if (!*result) {
+            return {};
+        }
+        n ^= (static_cast<uint>(1) << position);
+        return {};
+    }
+
+    static inline constexpr
+    auto resetBit(std::unsigned_integral auto& n) noexcept
+        -> std::expected<void, std::domain_error>
+    {
+        n &= 0x0;
+        return {};
+    }
+
+    static constexpr
+    auto resetBit(std::unsigned_integral auto&         n       ,
+                  const std::same_as<std::size_t> auto position,
+                  const valid_positions auto...        positions) noexcept
+        -> std::expected<void, std::domain_error>
+    {
+        using return_t = std::expected<void, std::domain_error>;
+        if (
+            const return_t result = freefuncs::resetBit(n, position);
+            !result
+            )
+        {
+            return result;
+        }
+
+        return_t result;
+        if constexpr (sizeof...(positions) > 0) {
+            result = freefuncs::resetBit(n, positions...);
+        }
+        return result;
+    }
+
+    [[nodiscard]] static inline constexpr
+    auto pos(const std::unsigned_integral auto position) noexcept
+        -> std::size_t
+    {
+        return static_cast<std::size_t>(position);
+    }
+
+    template <std::unsigned_integral uint> static constexpr
+    auto flipBit(uint& n, const std::size_t position) noexcept
+        -> std::expected<void, std::domain_error>
+    {
+        if (!freefuncs::checkBitInrange<uint>(position)) {
+            return std::unexpected(
+                std::domain_error("Bit position out of bound.")
+            );
+        }
+        n ^= (static_cast<uint>(1) << position);
+        return {};
+    }
+
+    static inline constexpr
+    auto flipBit(std::unsigned_integral auto& n) noexcept
+        -> std::expected<void, std::domain_error>
+    {
+        n = ~n;
+        return {};
+    }
+
+    static constexpr
+    auto flipBit(std::unsigned_integral auto&         n       ,
+                 const std::same_as<std::size_t> auto position,
+                 const valid_positions auto...        positions) noexcept
+        -> std::expected<void, std::domain_error>
+    {
+        using return_t = std::expected<void, std::domain_error>;
+        if (
+            const return_t result = freefuncs::flipBit(n, position);
+            !result
+            )
+        {
+            return result;
+        }
+
+        return_t result;
+        if constexpr (sizeof...(positions) > 0) {
+            result = freefuncs::flipBit(n, positions...);
+        }
+        return result;
+    }
+
+    /**
+     * The solution to solve problem with multiply invokes undefined behaviour
+     *
+     * Explanation:
+     *
+     *  Define A & B be unsigned integers, whose size less than signed int (normally 32bits)
+     *  If the product of A * B overflows, A & B will be promoted to signed int and multiply.
+     *  However, if the result overflows, signed int will invoke undefined behaviour.
+     *
+     * Solution:
+     *
+     *  Use template method to let unsigned integers only promote to unsigned int.
+     *  After the operation is done, truncated the result to original size.
+     */
+
+    template <std::unsigned_integral uint>
+    struct MakePromoted
+    {
+        static constexpr bool small = sizeof(uint) < sizeof(std::uint32_t);
+
+        using type = std::conditional_t<small, std::uint32_t, uint>;
+    };
+
+    template <typename T>
+    using make_promoted_t = typename MakePromoted<T>::type;
+
+    template <typename T> [[nodiscard]] static inline constexpr
+    auto promote(const T n) noexcept
+        -> make_promoted_t<T>
+    {
+        return n;
+    }
+}
 
 
-// total number of registers are 16, including:
-// R0 - R12 ==> General purpose register
-// R13 / SP ==> Stack pointer register
-// R14 / LR ==> Link register (return address)
-// R15 / PC ==> Program counter register
+namespace scsp::register_file
+{
+    enum GPReg : std::uint8_t {
+        R0 = 0, //  \ 
+        R1,     //   |
+        R2,     //   |
+        R3,     //   |
+        R4,     //   |
+        R5,     //   |  General
+        R6,     //   |  Purpose
+        R7,     //   |  Registers
+        R8,     //   |
+        R9,     //   |
+        R10,    //   |
+        R11,    //   |
+        R12,    //  /
 
-// special registers
-// PSR		==> Program state register (flags)
+        SP,     //      Stack Pointer
+        LR,     //      Link Register
+        PC      //      Program Counter
+    };
 
-// Segment registers
-// CS		==> Code segment starting address
-// DS		==> Data segment starting address
-// SS		==> Stack segment starting address
-// ES		==> Extra segment starting address
+    enum SEGReg : std::uint8_t {
+        CS,		//      Code Segment
+        DS,		//      Data Segment
+        SS,		//      Stack Segment
+        ES		//      Extra Segment
+    };
 
-// bit-width of these 16 registers and Segment registers can be customized to 32 bits or 64 bits
-// PSR stays 8 bits wide
+    enum PSRReg : std::uint8_t {
+        N,	    //      Negative or less than flag
+        Z,	    //      Zero flag
+        C,	    //      Carry/borrow flag
+        V	    //      Overflow flag
+    };
 
-enum GPReg : std::uint8_t {
-	// general purpose registers
-	R0 = 0,	// index starting from 0
-	R1,
-	R2,
-	R3,
-	R4,
-	R5,
-	R6,
-	R7,
-	R8,
-	R9,
-	R10,
-	R11,
-	R12,
-	// special purpose registers
-	SP,		// Stack Pointer register
-	LR,		// Link register
-	PC		// Program counter
-};
+    template <std::unsigned_integral uint>
+    class Registers
+    {
+    public:
+        using PSR_width_type = std::uint8_t;
+        using GP_width_type  = uint;
+        using PSR_model_type = PSR_width_type;
+        using GP_model_type  = std::array<GP_width_type, 16>;
 
-enum SEGReg : std::uint8_t {
-	CS,		// Code Segment
-	DS,		// Data Segment
-	SS,		// Stack Segment
-	ES		// Extra Segment
-};
+    public:
+        [[nodiscard]] constexpr explicit
+        Registers() noexcept = default;
 
-enum PSRReg : std::uint8_t {
-	N,	// Negative or less than flag
-	Z,	// Zero flag
-	C,	// Carry/borrow flag
-	V	// Overflow flag
-};
+    public:
+        [[nodiscard]] inline constexpr
+        auto getGeneralPurpose(const std::uint8_t register_name) noexcept
+            -> GP_width_type&
+        {
+            return m_gp[register_name];
+        }
 
-template <std::unsigned_integral T>
-class Registers {
-public:
-	using psr_width = std::uint8_t;
-	using gp_width  = T;
+        [[nodiscard]] inline constexpr
+        auto getGeneralPurpose(const std::uint8_t register_name) const noexcept
+            -> GP_width_type
+        {
+            return m_gp.at(register_name);
+        }
 
-	using psr_model = psr_width;
-	using gp_model  = std::array<gp_width, 16>;
+        [[nodiscard]] inline constexpr
+        auto getProgramStatus(const std::uint8_t flag_name) const noexcept
+            -> bool
+        {
+            namespace ff = ::scsp::freefuncs;
+            return ff::testBit<PSR_width_type>(m_psr, flag_name);
+        }
 
-	// default initialize all register content to 0
-	// initialize registers to a certain value is the job of CPU
-	[[nodiscard]] constexpr explicit Registers() noexcept = default;
+        constexpr
+        auto setProgramStatus(const std::uint8_t flag_name, const bool value) noexcept
+            -> std::expected<bool, std::runtime_error>
+        {
+            namespace ff = ::scsp::freefuncs;
+            std::expected<void, std::domain_error> result =
+                (value) ? ff::setBit  <PSR_width_type>(m_psr, flag_name) :
+                          ff::resetBit<PSR_width_type>(m_psr, flag_name);
+            if (!result) {
+                return std::unexpected(
+                    std::runtime_error("setBit / resetBit failed")
+                );
+            }
+            return {};
+        }
 
-	// ---------------------------------------------------
-	// General Purpose Registers
-	// ---------------------------------------------------
+        [[nodiscard]] inline constexpr
+        auto getPsrValue() const noexcept
+            -> PSR_width_type
+        {
+            return m_psr;
+        }
 
-	// overload 1: without const
-	[[nodiscard]] constexpr auto GP(std::uint8_t RegName) noexcept -> gp_width& {
-		return gp_[RegName];
-	}
-	// overload 2: const overload
-	[[nodiscard]] constexpr auto GP(std::uint8_t RegName) const noexcept -> gp_width {
-		return gp_.at(RegName);
-	}
+        inline constexpr
+        auto clearPsrValue() noexcept
+            -> void
+        {
+            m_psr = 0x0;
+        }
 
-	// ---------------------------------------------------
-	// Program Status Register
-	// ---------------------------------------------------
-
-	// specify which bit flag to test
-	[[nodiscard]] constexpr auto PSR(std::uint8_t FlagName) const noexcept -> bool {
-		return bit_test<psr_width>(psr_, FlagName);
-	}
-	// set the value of the given PSR bit
-	constexpr auto PSR(std::uint8_t FlagName, const bool v) noexcept -> bool {
-		auto t = (v) ? \
-			bit_set<psr_width>(psr_, FlagName) :
-			bit_reset<psr_width>(psr_, FlagName);
-		if (!t.has_value()) {
-			return false;
-		}
-		psr_ = t.value();
-		return true;
-	}
-	// get the value of the PSR
-	[[nodiscard]] constexpr auto get_psr_value() const noexcept -> psr_width {
-		return psr_;
-	}
-	// clear the value of the PSR
-	constexpr auto clear_psr() noexcept -> void {
-		psr_ = static_cast<psr_model>(0x0);
-	}
-
-private:
-	gp_model gp_{};
-	psr_model psr_{};
-};
+    private:
+        GP_model_type  m_gp{};
+        PSR_model_type m_psr{};
+    };
+}
 
 
-// -------------------------------------------------------
-//
-// ALU
-// 
-// -------------------------------------------------------
+namespace scsp::ALU
+{
+    /**
+    * ALU is a black box, it takes in a input, and spit the output;
+    *						   ______________
+    *						  |				 |
+    *	Operands -----------> |		ALU		 | -------------> Output
+    *						  |______________|
+    *
+    */
+
+    enum struct ALUOpCode : std::uint8_t 
+    {
+                //      Arithmetic operations
+        ADD,	//      Add two operands
+        UMUL,	//      Multiple A & B
+        UDIV,	//      Divide A & B
+        UMOL,	//      Take the modulus (%)
+        PASS,	//      Pass through one operand without change
+
+                //      Bitwise logical operations
+        AND,	//      Bitwise And of A & B
+        ORR,	//      Bitwise Or of A & B
+        XOR,	//      Bitwise Xor of A & B
+        COMP,	//      One's compliment of A / B
+
+                //      Bit shift operations
+        SHL,	//      Logical shift left
+        SHR,	//      Logical shift right
+        RTL,	//      Rotate left
+        RTR,	//      Rotate right
+    };
+
+    template <std::unsigned_integral Width>
+    struct ALUInput
+    {
+        using operand_width_type = Width;
+
+        ALUOpCode               m_opcode;       // the Opcode the ALU will operate in
+        std::pair<Width, Width> m_operands;     // A & B two operands
+    };
+
+    template <std::unsigned_integral Width>
+    struct ALUOutput
+    {
+        using operand_width_type = Width;
+        using updated_flags_type = std::unordered_set<std::uint8_t>;
+
+        updated_flags_type m_flags;             // The PSR flags the operation produces
+        operand_width_type m_result;            // The result of the operation
+    };
+
+    template <typename Function, typename Param>
+    concept valid_callback_function = requires
+    {
+        requires
+        std::is_invocable_r_v<bool, Function, Param, Param, Param>;
+    };
+
+    class ALU
+    {
+    public:
+        template <std::unsigned_integral Width> [[nodiscard]] static constexpr
+        auto execute(ALUInput<Width> alu_input) noexcept
+            -> ALUOutput<Width>
+        {
+            using operand_width_type = typename ALUInput<Width>::operand_width_type;
+            std::pair<operand_width_type, operand_width_type> AB = alu_input.m_operands;
+            using enum ::scsp::ALU::ALUOpCode;
+
+            switch (alu_input.m_opcode)
+            {
+                case ADD :  return add (AB.first, AB.second);
+                case UMUL:  return umul(AB.first, AB.second);
+                case UDIV:  return udiv(AB.first, AB.second);
+                case UMOL:  return umol(AB.first, AB.second);
+                case PASS:  return pass(AB.first           );
+
+                case AND :  return and_(AB.first, AB.second);
+                case ORR :  return orr (AB.first, AB.second);
+                case XOR :  return xor_(AB.first, AB.second);
+                case COMP:  return comp(AB.first           );
+
+                case SHL :  return shl (AB.first, AB.second);
+                case SHR :  return shr (AB.first, AB.second);
+                case RTL :  return rtl (AB.first, AB.second);
+                case RTR :  return rtr (AB.first, AB.second);
+            }
+
+            return ALUOutput<Width>{};
+        }
+
+    private:
+        template <std::unsigned_integral T> [[nodiscard]] static constexpr
+        auto getProgramStatusFlags(const T R, std::unordered_set<std::uint8_t>& flags) noexcept
+            -> void
+        {
+            // get program status flags from result only
+            // if the first bit (sign bit) is set, then set Neg flag;
+            namespace ff = ::scsp::freefuncs;
+            using enum ::scsp::register_file::PSRReg;
+            if (ff::testBit<T>(R, sizeof(T) * CHAR_BIT - 1)) {
+                flags.insert(N);
+            }
+            // if the result is equal to 0, then set Zero flag;
+            if (ff::testBitNone(R) && R == 0x0) {
+                flags.insert(Z);
+            }
+        }
+
+        template <std::unsigned_integral T> [[nodiscard]] static constexpr
+        auto getProgramStatusFlags(const T R) noexcept
+            -> std::unordered_set<std::uint8_t>
+        {
+            std::unordered_set<std::uint8_t> flags{};
+            getProgramStatusFlags<T>(R, flags);
+            return flags;
+        }
+
+        template <std::unsigned_integral     T      ,
+                  valid_callback_function<T> Function> [[nodiscard]] static constexpr
+        auto getProgramStatusFlags(const T A, const T B, const T R,
+                                   Function checkCarry, Function checkOverflow) noexcept
+            -> std::unordered_set<std::uint8_t>
+        {
+            using enum ::scsp::register_file::PSRReg;
+            std::unordered_set<std::uint8_t> flags{};
+            if (checkCarry(A, B, R)) {
+                flags.insert(C);
+            }
+            if (checkOverflow(A, B, R)) {
+                flags.insert(V);
+            }
+            // Neg and Zero delegate to other overload
+            getProgramStatusFlags<T>(R, flags);
+            return flags;
+        }
+
+        template <std::unsigned_integral T> [[nodiscard]] static constexpr
+        auto makeOutput(const T R) noexcept
+            -> ALUOutput<T>
+        {
+            std::unordered_set<std::uint8_t> flags = getProgramStatusFlags<T>(R);
+            return ALUOutput<T>{
+                .m_flags = std::move(flags),
+                .m_result = R
+            };
+        }
+
+        // 1. ADD
+        template <std::unsigned_integral T> [[nodiscard]] static constexpr
+        auto add(const T A, const T B) noexcept
+            -> ALUOutput<T>
+        {
+            const T R = A + B;
+
+            auto checkCarry = [](const T A, const T B, const T R) noexcept
+                -> bool
+            {
+                return (R < A && R < B) ? true : false;
+            };
+            auto checkOverflow = [](const T A, const T B, const T R) noexcept
+                -> bool
+            {
+                std::size_t msb = sizeof(T) * CHAR_BIT - 1;
+                namespace ff = ::scsp::freefuncs;
+                // if A & B's msb differ, no overflow
+                if (ff::testBit<T>(A, msb) ^ ff::testBit<T>(B, msb)) {
+                    return false;
+                }
+                // check if A | B's msb differ from R's msb
+                return (ff::testBit<T>(A, msb) ^ ff::testBit<T>(R, msb)) ? true : false;
+            };
+
+            using flag_type = std::unordered_set<std::uint8_t>;
+            flag_type flags = getProgramStatusFlags<T, std::function<bool(T, T, T)>>(
+                A, B, R,
+                checkCarry, checkOverflow
+            );
+
+            return ALUOutput<T> {
+                .m_flags = std::move(flags),
+                .m_result = R
+            };
+        }
+
+        // 2. UMUL
+        template <std::unsigned_integral T> [[nodiscard]] static constexpr
+        auto umul(const T A, const T B) noexcept
+            -> ALUOutput<T>
+        {
+            /// EXPERIMENTAL! NO CV FLAGS WILL BE DETECTED! ///
+            
+            using ::scsp::freefuncs::promote;
+            return makeOutput<T>(static_cast<T>(promote<T>(A) * promote<T>(B)));
+        }
+
+        // 3. UDIV
+        template <std::unsigned_integral T> [[nodiscard]] static constexpr
+        auto udiv(const T A, const T B) noexcept
+            -> ALUOutput<T>
+        {
+            using ::scsp::freefuncs::testBitNone;
+            if (testBitNone(B) && B == 0x0) {
+                return ALUOutput<T>{};
+            }
+            return makeOutput<T>(A / B);
+        }
+
+        // 4. UMOL
+        template <std::unsigned_integral T> [[nodiscard]] static constexpr
+        auto umol(const T A, const T B) noexcept
+            -> ALUOutput<T>
+        {
+            using ::scsp::freefuncs::testBitNone;
+            if (testBitNone(B) && B == 0x0) {
+                return ALUOutput<T>{};
+            }
+            return makeOutput<T>(A % B);
+        }
+
+        // 5. PASS
+        template <std::unsigned_integral T> [[nodiscard]] static inline constexpr
+        auto pass(const T A) noexcept
+            -> ALUOutput<T>
+        {
+            return makeOutput<T>(A);
+        }
+
+        // 6. AND
+        template <std::unsigned_integral T> [[nodiscard]] static inline constexpr
+        auto and_(const T A, const T B) noexcept
+            -> ALUOutput<T>
+        {
+            return makeOutput<T>(A & B);
+        }
+
+        // 7. ORR
+        template <std::unsigned_integral T> [[nodiscard]] static inline constexpr
+        auto orr(const T A, const T B) noexcept
+            -> ALUOutput<T>
+        {
+            return makeOutput<T>(A | B);
+        }
+
+        // 8. XOR
+        template <std::unsigned_integral T> [[nodiscard]] static inline constexpr
+        auto xor_(const T A, const T B) noexcept
+            -> ALUOutput<T>
+        {
+            return makeOutput<T>(A ^ B);
+        }
+
+        // 9. COMP
+        template <std::unsigned_integral T> [[nodiscard]] static constexpr
+        auto comp(T A) noexcept
+            -> ALUOutput<T>
+        {
+            using ::scsp::freefuncs::flipBit;
+            std::expected<void, std::domain_error> result = flipBit(A);
+            return (result) ?
+                    makeOutput<T>(A) :
+                    ALUOutput<T>{};
+        }
+
+        // 10. SHL
+        template <std::unsigned_integral T> [[nodiscard]] static inline constexpr
+        auto shl(const T A, const T B) noexcept
+            -> ALUOutput<T>
+        {
+            return makeOutput<T>(A << B);
+        }
+
+        // 11. SHR
+        template <std::unsigned_integral T> [[nodiscard]] static inline constexpr
+        auto shr(const T A, const T B) noexcept
+            -> ALUOutput<T>
+        {
+            return makeOutput<T>(A >> B);
+        }
+
+        // 12. RTL
+        template <std::unsigned_integral T> [[nodiscard]] static inline constexpr
+        auto rtl(const T A, const T B) noexcept
+            -> ALUOutput<T>
+        {
+            return makeOutput<T>(std::rotl<T>(A, static_cast<int>(B)));
+        }
+
+        // 13. RTR
+        template <std::unsigned_integral T> [[nodiscard]] static inline constexpr
+        auto rtr(const T A, const T B) noexcept
+            -> ALUOutput<T>
+        {
+            return makeOutput<T>(std::rotr<T>(A, static_cast<int>(B)));
+        }
+    };
+}
 
 
-/**
-* ALU is a black box, it takes in a input, and spit the output;
-*						   ______________
-*						  |				 |
-*	Operands -----------> |		ALU		 | -------------> Output
-*						  |______________|
-*
-*/
-
-// define all possible operations the ALU can handle
-enum struct ALU_OpCode : std::uint8_t {
-	// Arithmetic operations
-	ADD,	// Add two operands
-	UMUL,	// Multiple A & B
-	UDIV,	// Divide A & B
-	UMOL,	// Take the modulus (%)
-	PASS,	// Pass through one operand without change
-
-	// Bitwise logical operations
-	AND,	// Bitwise And of A & B
-	ORR,	// Bitwise Or of A & B
-	XOR,	// Bitwise Xor of A & B
-	COMP,	// One's compliment of A / B
-
-	// Bit shift operations
-	SHL,	// Logical shift left
-	SHR,	// Logical shift right
-	RTL,	// Rotate left
-	RTR,	// Rotate right
-};
-
-// the input to the ALU
-template <std::unsigned_integral S>
-struct ALU_in {
-	using op_size = S;
-
-	ALU_OpCode					OpCode_;	// the Opcode the ALU will operate in
-	std::pair<op_size, op_size> Ops_;		// A & B two operands
-};
-
-// the output to the ALU
-template <std::unsigned_integral S>
-struct ALU_out {
-	using op_size = S;
-	using flag_type = std::unordered_set<std::uint8_t>;
-
-	flag_type			Flags_;		// The PSR flags the operation produces
-	op_size				Res_;		// The result of the operation
-};
-
-// define special concept used later
-template <class F, class T>
-concept is_valid_callback = std::is_invocable_r_v<bool, F, T, T, T>;
-
-// complete namespace class - pure static functions
-class ALU {
-public:
-	// ---------------------------------------------
-	// Factory function
-	// 
-	// Dynamic dispatch
-	// ---------------------------------------------
-
-	template <std::unsigned_integral T>
-	[[nodiscard]] static constexpr auto exec(ALU_in<T> alu_in) noexcept -> ALU_out<T> {
-		using op_size = typename ALU_in<T>::op_size;
-		std::pair<op_size, op_size> AB = alu_in.Ops_;
-		switch (alu_in.OpCode_) {
-			case ALU_OpCode::ADD:		return ALU::ADD(AB.first, AB.second);
-			case ALU_OpCode::UMUL:		return ALU::UMUL(AB.first, AB.second);
-			case ALU_OpCode::UDIV:		return ALU::UDIV(AB.first, AB.second);
-			case ALU_OpCode::UMOL:		return ALU::UMOL(AB.first, AB.second);
-			case ALU_OpCode::PASS:		return ALU::PASS(AB.first);
-
-			case ALU_OpCode::AND:		return ALU::AND(AB.first, AB.second);
-			case ALU_OpCode::ORR:		return ALU::ORR(AB.first, AB.second);
-			case ALU_OpCode::XOR:		return ALU::XOR(AB.first, AB.second);
-			case ALU_OpCode::COMP:		return ALU::COMP(AB.first);
-
-			case ALU_OpCode::SHL:		return ALU::SHL(AB.first, AB.second);
-			case ALU_OpCode::SHR:		return ALU::SHR(AB.first, AB.second);
-			case ALU_OpCode::RTL:		return ALU::RTL(AB.first, AB.second);
-			case ALU_OpCode::RTR:		return ALU::RTR(AB.first, AB.second);
-
-			// NO DEFAULT BRANCH!
-			// The compiler will warn about OpCode missuse
-		}
-		// dummy return value, to eliminate compiler warning.
-		return ALU_out<T>{};
-	}
-
-private:
-	// ---------------------------------------------
-	// All underlying implemetation details
-	// ALU_out is very light-weight;
-	// Feel free to pass / return by value.
-	// ---------------------------------------------
-
-	// 0. PSR setter (result only | with-preset flags)
-	template <std::unsigned_integral T>
-	[[nodiscard]] static constexpr auto get_psf(T R, std::unordered_set<std::uint8_t>& flags)
-		noexcept -> void {
-		// only from the result, we can get information about Z and N
-		// if the first bit (sign bit) is set, then set N
-		if (bit_test<T>(R, sizeof(T) * byte_size - 1)) {
-			flags.insert(N);
-		}
-		// if the result is equal to 0, then set Z
-		if (bit_test_none<T>(R) && R == 0x0) {
-			flags.insert(Z);
-		}
-	}
-
-	// 0. PSR setter (result only | non-preset flags)
-	template <std::unsigned_integral T>
-	[[nodiscard]] static constexpr auto get_psf(T R) noexcept
-		-> std::unordered_set<std::uint8_t> {
-		std::unordered_set<std::uint8_t> flags{};
-		get_psf<T>(R, flags);
-		return flags;
-	}
-
-	// 0. PSR setter (result and operands)
-	template <std::unsigned_integral T, is_valid_callback<T> F>
-	[[nodiscard]] static constexpr auto get_psf(
-		T A, T B, T R,	// operands & results
-		F CC,	// check carry flag
-		F CV	// check overflow flag
-	) noexcept -> std::unordered_set<std::uint8_t> {
-		std::unordered_set<std::uint8_t> flags{};
-		// use CC and CV to check if C or V flag should be set
-		if (CC(A, B, R)) {
-			flags.insert(C);
-		}
-		if (CV(A, B, R)) {
-			flags.insert(V);
-		}
-		// for the rest we can delegate to the other overload
-		get_psf<T>(R, flags);
-		return flags;
-	}
-
-	// 0.5. Make ALU output
-	template <std::unsigned_integral T>
-	[[nodiscard]] static constexpr auto make_ALUOut(T R) noexcept -> ALU_out<T> {
-		std::unordered_set<std::uint8_t> flags = ALU::get_psf<T>(R);
-		return ALU_out<T> {.Flags_ = std::move(flags), .Res_ = R};
-	}
-
-	// 1. ADD - Add two operands
-	template <std::unsigned_integral T>
-	[[nodiscard]] static constexpr auto ADD(T A, T B) noexcept -> ALU_out<T> {
-		T R = A + B;
-		std::unordered_set<std::uint8_t> flags = ALU::get_psf<T, std::function<bool(T, T, T)>>(
-			A, B, R,
-			// CC - Carry
-			[](T A, T B, T R) noexcept -> bool { return (R < A && R < B) ? true : false; },
-			// CV - Overflow
-			[](T A, T B, T R) noexcept -> bool {
-				std::size_t msb{sizeof(T)* byte_size - 1};
-				// if A & B's msb differ, then we are safe
-				if (bit_test<T>(A, msb) ^ bit_test<T>(B, msb)) {
-					return false;
-				}
-				// check if A | B's msb differ from R's msb
-				return (bit_test<T>(A, msb) ^ bit_test<T>(R, msb)) ? true : false;
-			}
-		);
-		// construct ALU_out with flags and R
-		return ALU_out<T> {.Flags_ = std::move(flags), .Res_ = R};
-	}
-
-	// 2. UMUL - Unsigned Multiple A & B
-	template <std::unsigned_integral T>
-	[[nodiscard]] static constexpr auto UMUL(T A, T B) noexcept ->  ALU_out<T> {
-		// EXPERIMENTAL! NO CV FLAGS WILL BE DETECTED!
-		// take care of the issue with integer promotion
-		return ALU::make_ALUOut<T>(static_cast<T>(promote<T>(A) * promote<T>(B)));
-	}
-
-	// 3. UDIV - Unsigned Divide A & B
-	template <std::unsigned_integral T>
-	[[nodiscard]] static constexpr auto UDIV(T A, T B) noexcept ->  ALU_out<T> {
-		// take care of B is 0x00, undefined behaviour
-		if (bit_test_none<T>(B) && B == 0x0) {
-			return ALU_out<T>{};
-		}
-		return ALU::make_ALUOut<T>(A / B);
-	}
-
-	// 4. UMOL - Take the modulus (%) of Unsigned integers
-	template <std::unsigned_integral T>
-	[[nodiscard]] static constexpr auto UMOL(T A, T B) noexcept ->  ALU_out<T> {
-		// take care of B is 0x00, undefined behaviour
-		if (bit_test_none<T>(B) && B == 0x0) {
-			return ALU_out<T>{};
-		}
-		return ALU::make_ALUOut<T>(A % B);
-	}
-
-	// 5. PASS - Pass through one operand without change
-	template <std::unsigned_integral T>
-	[[nodiscard]] static constexpr auto PASS(T A) noexcept ->  ALU_out<T> { return ALU::make_ALUOut<T>(A); }
-
-	// 6. AND - Bitwise And of A & B
-	template <std::unsigned_integral T>
-	[[nodiscard]] static constexpr auto AND(T A, T B) noexcept ->  ALU_out<T> { return ALU::make_ALUOut<T>(A & B); }
-
-	// 7. ORR - Bitwise Or of A & B
-	template <std::unsigned_integral T>
-	[[nodiscard]] static constexpr auto ORR(T A, T B) noexcept ->  ALU_out<T> { return ALU::make_ALUOut<T>(A | B); }
-
-	// 8. XOR - Bitwise Xor of A & B
-	template <std::unsigned_integral T>
-	[[nodiscard]] static constexpr auto XOR(T A, T B) noexcept ->  ALU_out<T> { return ALU::make_ALUOut<T>(A ^ B); }
-
-	// 9. COMP - One's compliment of A
-	template <std::unsigned_integral T>
-	[[nodiscard]] static constexpr auto COMP(T A) noexcept ->  ALU_out<T> {
-		std::optional<T> R = bit_flip<T>(A);
-		return (R.has_value()) ? ALU::make_ALUOut<T>(R.value()) : ALU_out<T>{};
-	}
-
-	// 10. SHL - Logical shift left
-	template <std::unsigned_integral T>
-	[[nodiscard]] static constexpr auto SHL(T A, std::size_t s) noexcept ->  ALU_out<T> {
-		return ALU::make_ALUOut<T>(A << s);
-	}
-
-	// 11. SHR - Logical shift right
-	template <std::unsigned_integral T>
-	[[nodiscard]] static constexpr auto SHR(T A, std::size_t s) noexcept ->  ALU_out<T> {
-		return ALU::make_ALUOut<T>(A >> s);
-	}
-
-	// 12. RTL - Rotate left
-	template <std::unsigned_integral T>
-	[[nodiscard]] static constexpr auto RTL(T A, std::size_t s) noexcept ->  ALU_out<T> {
-		return ALU::make_ALUOut<T>(std::rotl<T>(A, static_cast<int>(s)));
-	}
-
-	// 13. RTR - Rotate right
-	template <std::unsigned_integral T>
-	[[nodiscard]] static constexpr auto RTR(T A, std::size_t s) noexcept ->  ALU_out<T> {
-		return ALU::make_ALUOut<T>(std::rotr<T>(A, static_cast<int>(s)));
-	}
-};
 
 
-// -------------------------------------------------------
-// 
-// Decoder
-// 
-// -------------------------------------------------------
+
+
+
+
+
+
+
+   
+
+
+
+
+
 
 
 // 5 types of instructions:
 enum OpType : std::uint8_t {
-	R_t,		// R_type ==> 2 source registers, 1 dest registers, no imm; Binary operations
-				//			  ADD Rd, Rs, Rm | MUL Rd, Rs, Rm
-	I_t,		// I_type ==> 1 source register, 1 dest register, 1 imm; Binary operations, with imm
-				//			  ADD Rd, Rs, imm
-	U_t,		// U_type ==> 1 source register, 1 dest register, 0 imm; Unary operations
-				//			  NEG Rd, Rs | NOT Rd, Rs | LDR Rd, Rs | STR Rd, Rs
-	S_t,		// S_type ==> 0 source register, 1 dest register, 0 imm (only for stack operations)
-				//			  PUSH Rd | POP  Rd
-	J_t			// J_type ==> 0 source register, 0 dest register 1 imm (only for branching)
-				//			  JMP imm | JEQ	imm
+    R_t,		// R_type ==> 2 source registers, 1 dest registers, no imm; Binary operations
+                //			  ADD Rd, Rs, Rm | MUL Rd, Rs, Rm
+    I_t,		// I_type ==> 1 source register, 1 dest register, 1 imm; Binary operations, with imm
+                //			  ADD Rd, Rs, imm
+    U_t,		// U_type ==> 1 source register, 1 dest register, 0 imm; Unary operations
+                //			  NEG Rd, Rs | NOT Rd, Rs | LDR Rd, Rs | STR Rd, Rs
+    S_t,		// S_type ==> 0 source register, 1 dest register, 0 imm (only for stack operations)
+                //			  PUSH Rd | POP  Rd
+    J_t			// J_type ==> 0 source register, 0 dest register 1 imm (only for branching)
+                //			  JMP imm | JEQ	imm
 };
 
 enum OpCode : std::uint8_t {
-	// Opcode	//		Explanation			//		Example					//		Semantics
-	ADD,		// add two operands			//		ADD  R1, R2, R3/imm		//		R1 <- R2 + R3/imm
-	UMUL,		// multiple two operands	//		UMUL R1, R2, R3/imm		//		R1 <- R2 * R3/imm
-	UDIV,		// divide two operands		//		UDIV R1, R2, R3/imm		//		R1 <- R2 / R3/imm
-	UMOL,		//		op1 % op2			//		UMOL R1, R2, R3/imm		//		R1 <- R2 % R3/imm
+    // Opcode	//		Explanation			//		Example					//		Semantics
+    ADD,		// add two operands			//		ADD  R1, R2, R3/imm		//		R1 <- R2 + R3/imm
+    UMUL,		// multiple two operands	//		UMUL R1, R2, R3/imm		//		R1 <- R2 * R3/imm
+    UDIV,		// divide two operands		//		UDIV R1, R2, R3/imm		//		R1 <- R2 / R3/imm
+    UMOL,		//		op1 % op2			//		UMOL R1, R2, R3/imm		//		R1 <- R2 % R3/imm
 
-	AND,		// bitwise And of A & B		//		AND  R1, R2, R3/imm		//		R1 <- R2 & R3/imm
-	ORR,		// bitwise Or of A & B		//		ORR  R1, R2, R3/imm		//		R1 <- R2 | R3/imm
-	XOR,		// bitwise Xor of A & B		//		XOR  R1, R2, R3/imm		//		R1 <- R2 ^ R3/imm
-	SHL,		// logical shift left		//		SHL  R1, R2, R3/imm		//		R1 <- R2 << R3/imm
-	SHR,		// logical shift right		//		SHR  R1, R2, R3/imm		//		R1 <- R2 >> R3/imm
-	RTL,		// logical rotate left		//		RTL  R1, R2, R3/imm		//		R1 <- R2 <~ R3/imm
-	RTR,		// logical rotate right		//		RTR  R1, R2, R3/imm		//		R1 <- R2 ~> R3/imm
+    AND,		// bitwise And of A & B		//		AND  R1, R2, R3/imm		//		R1 <- R2 & R3/imm
+    ORR,		// bitwise Or of A & B		//		ORR  R1, R2, R3/imm		//		R1 <- R2 | R3/imm
+    XOR,		// bitwise Xor of A & B		//		XOR  R1, R2, R3/imm		//		R1 <- R2 ^ R3/imm
+    SHL,		// logical shift left		//		SHL  R1, R2, R3/imm		//		R1 <- R2 << R3/imm
+    SHR,		// logical shift right		//		SHR  R1, R2, R3/imm		//		R1 <- R2 >> R3/imm
+    RTL,		// logical rotate left		//		RTL  R1, R2, R3/imm		//		R1 <- R2 <~ R3/imm
+    RTR,		// logical rotate right		//		RTR  R1, R2, R3/imm		//		R1 <- R2 ~> R3/imm
 
-	NOT,		// comp all the bits		//		NOT  R1, R2				//		R1 <- ~R2
+    NOT,		// comp all the bits		//		NOT  R1, R2				//		R1 <- ~R2
 
-	LDR,		// load reg from mem		//		LDR  R1, R2				//		R1 <- [R2]
-	STR,		// store reg in mem			//		STR  R1, R2				//		[R1] <- R2
+    LDR,		// load reg from mem		//		LDR  R1, R2				//		R1 <- [R2]
+    STR,		// store reg in mem			//		STR  R1, R2				//		[R1] <- R2
 
-	PUSH,		// push reg onto stack		//		PUSH R1					//		[SP - 4] <- R1;
-	POP,		// pop top ele into reg		//		POP	 R1					//		R1 <- [SP] + 4
+    PUSH,		// push reg onto stack		//		PUSH R1					//		[SP - 4] <- R1;
+    POP,		// pop top ele into reg		//		POP	 R1					//		R1 <- [SP] + 4
 
-	JMP,		//	unconditional jump		//		JMP label				//		N/A
-	JZ,			// jump if Z flag is set	//		JZ	label				//		N/A
-	JN,			// jump if N flag is set	//		JN	label				//		N/A
-	JC,			// jump if C flag is set	//		JC	label				//		N/A
-	JV,			// jump if V flag is set	//		JV	label				//		N/A
-	JZN,		// jump if Z or N is set	//		JZN label				//		N/A
+    JMP,		//	unconditional jump		//		JMP label				//		N/A
+    JZ,			// jump if Z flag is set	//		JZ	label				//		N/A
+    JN,			// jump if N flag is set	//		JN	label				//		N/A
+    JC,			// jump if C flag is set	//		JC	label				//		N/A
+    JV,			// jump if V flag is set	//		JV	label				//		N/A
+    JZN,		// jump if Z or N is set	//		JZN label				//		N/A
 
-	SYSCALL		// invokes system calls		//		SYSCALL 1				//		N/A
+    SYSCALL		// invokes system calls		//		SYSCALL 1				//		N/A
 };
 
 // Encoding rules
 // It's the encoding designer's obligation to make sure all info can be fit in min_width
 struct default_encoding final {
-	using min_width = std::uint32_t;				// minimum instruction length
-	using idx_len_t = std::uint8_t;					// type used to encode idx and len
-	using field = std::pair<idx_len_t, idx_len_t>;	// field type
+    using min_width = std::uint32_t;				// minimum instruction length
+    using idx_len_t = std::uint8_t;					// type used to encode idx and len
+    using field = std::pair<idx_len_t, idx_len_t>;	// field type
 
-	// Basic layout:
-	// 1 0 9 8   7 6 5 4   3 2 1 0   9 8 7 6   5 4 3 2   1 0 9 8   7 6 5 4   3 2 1 0
-	// 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0
-	//					   \____/    \____/    \_____/   \_______________/   \_____/
-	// \_____________________|_/	   |		  |				  |				|
-	//			imm			 Rn		   Rm		  Rd			 OpCode		  OpType
+    // Basic layout:
+    // 1 0 9 8   7 6 5 4   3 2 1 0   9 8 7 6   5 4 3 2   1 0 9 8   7 6 5 4   3 2 1 0
+    // 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0
+    //					   \____/    \____/    \_____/   \_______________/   \_____/
+    // \_____________________|_/	   |		  |				  |				|
+    //			imm			 Rn		   Rm		  Rd			 OpCode		  OpType
 
-	// The encoding format is as follows: pair<start idx, nbit_len>
-	// Encoding as follows
-	static constexpr field op_type_{ 0 , 4 };
-	static constexpr field op_code_{ 4 , 8 };
-	static constexpr field		Rd_{ 12, 4 };
-	static constexpr field		Rm_{ 16, 4 };
-	static constexpr field		Rn_{ 20, 4 };	// Note: Rn and imm share the same 4 bits
-	static constexpr field	   imm_{ 20, 12};	// Allowed since Rn is optional
+    // The encoding format is as follows: pair<start idx, nbit_len>
+    // Encoding as follows
+    static constexpr field op_type_{ 0 , 4 };
+    static constexpr field op_code_{ 4 , 8 };
+    static constexpr field		Rd_{ 12, 4 };
+    static constexpr field		Rm_{ 16, 4 };
+    static constexpr field		Rn_{ 20, 4 };	// Note: Rn and imm share the same 4 bits
+    static constexpr field	   imm_{ 20, 12};	// Allowed since Rn is optional
 };
 
 // -------------------------------------------------------
@@ -804,84 +929,84 @@ struct default_encoding final {
 
 template <class E>
 concept is_valid_encoding = requires {
-	typename E::min_width;
-	typename E::idx_len_t;
-	std::convertible_to<typename E::idx_len_t, std::uint32_t>;
-	typename E::field;
-	std::same_as<typename E::field,
-		std::pair<typename E::idx_len_t, typename E::idx_len_t>>;
+    typename E::min_width;
+    typename E::idx_len_t;
+    std::convertible_to<typename E::idx_len_t, std::uint32_t>;
+    typename E::field;
+    std::same_as<typename E::field,
+        std::pair<typename E::idx_len_t, typename E::idx_len_t>>;
 }&& requires {
-	E::op_type_; E::op_code_; E::Rd_; E::Rm_; E::Rn_; E::imm_;
+    E::op_type_; E::op_code_; E::Rd_; E::Rm_; E::Rn_; E::imm_;
 };
 
 template <is_valid_encoding E>
 struct Instr {
 private:
-	using u8 = std::uint8_t;
-	using u16 = std::uint16_t;
-	using u32 = std::uint32_t;
+    using u8 = std::uint8_t;
+    using u16 = std::uint16_t;
+    using u32 = std::uint32_t;
 
 public:
-	// template metaprogramming technique here:
-	// automatically select the best-fitting uint types for each field
-	// OpType_type
-	using Tt = std::conditional_t<(E::op_type_.second <= sizeof(u8) * byte_size), u8,
-		std::conditional_t<(E::op_type_.second <= sizeof(u16) * byte_size), u16, u32>>;
-	// OpCode_type
-	using Ct = std::conditional_t<(E::op_code_.second <= sizeof(u8) * byte_size), u8,
-		std::conditional_t<(E::op_code_.second <= sizeof(u16) * byte_size), u16, u32>>;
-	// Register_type
-	static_assert(E::Rd_.second == E::Rm_.second && E::Rm_.second == E::Rn_.second);
-	using Rt = std::conditional_t<(E::Rd_.second <= sizeof(u8) * byte_size), u8,
-		std::conditional_t<(E::Rd_.second <= sizeof(u16) * byte_size), u16, u32>>;
-	// Immediate_type
-	using It = std::conditional_t<(E::imm_.second <= sizeof(u8) * byte_size), u8,
-		std::conditional_t<(E::imm_.second <= sizeof(u16) * byte_size), u16, u32>>;
+    // template metaprogramming technique here:
+    // automatically select the best-fitting uint types for each field
+    // OpType_type
+    using Tt = std::conditional_t<(E::op_type_.second <= sizeof(u8) * byte_size), u8,
+        std::conditional_t<(E::op_type_.second <= sizeof(u16) * byte_size), u16, u32>>;
+    // OpCode_type
+    using Ct = std::conditional_t<(E::op_code_.second <= sizeof(u8) * byte_size), u8,
+        std::conditional_t<(E::op_code_.second <= sizeof(u16) * byte_size), u16, u32>>;
+    // Register_type
+    static_assert(E::Rd_.second == E::Rm_.second && E::Rm_.second == E::Rn_.second);
+    using Rt = std::conditional_t<(E::Rd_.second <= sizeof(u8) * byte_size), u8,
+        std::conditional_t<(E::Rd_.second <= sizeof(u16) * byte_size), u16, u32>>;
+    // Immediate_type
+    using It = std::conditional_t<(E::imm_.second <= sizeof(u8) * byte_size), u8,
+        std::conditional_t<(E::imm_.second <= sizeof(u16) * byte_size), u16, u32>>;
 
-	Tt			type_;		// opcode type (R I U S J)
-	Ct			code_;		// opcode
-	Rt  Rd_, Rn_, Rm_;		// dest & source registers
-	It			 imm_;		// immediate value
+    Tt			type_;		// opcode type (R I U S J)
+    Ct			code_;		// opcode
+    Rt  Rd_, Rn_, Rm_;		// dest & source registers
+    It			 imm_;		// immediate value
 };
 
 // The main decoder class
 template <is_valid_encoding E = default_encoding>
 class Decoder {
 public:
-	using encoding = E;
-	using instr_type = Instr<encoding>;
+    using encoding = E;
+    using instr_type = Instr<encoding>;
 
-	template <std::unsigned_integral T>
-		requires(sizeof(T) >= sizeof(typename encoding::min_width))
-	[[nodiscard]] static constexpr auto decode(T instr) noexcept -> instr_type {
-		using Rt = typename instr_type::Rt;
-		return instr_type{
-			.type_ = Decoder::extract<T, typename instr_type::Tt>(instr, encoding::op_type_),
-			.code_ = Decoder::extract<T, typename instr_type::Ct>(instr, encoding::op_code_),
-			.Rd_ = Decoder::extract<T, Rt>(instr, encoding::Rd_),
-			.Rn_ = Decoder::extract<T, Rt>(instr, encoding::Rn_),
-			.Rm_ = Decoder::extract<T, Rt>(instr, encoding::Rm_),
-			.imm_ = Decoder::extract<T, typename instr_type::It>(instr, encoding::imm_)
-		};
-	}
+    template <std::unsigned_integral T>
+        requires(sizeof(T) >= sizeof(typename encoding::min_width))
+    [[nodiscard]] static constexpr auto decode(T instr) noexcept -> instr_type {
+        using Rt = typename instr_type::Rt;
+        return instr_type{
+            .type_ = Decoder::extract<T, typename instr_type::Tt>(instr, encoding::op_type_),
+            .code_ = Decoder::extract<T, typename instr_type::Ct>(instr, encoding::op_code_),
+            .Rd_ = Decoder::extract<T, Rt>(instr, encoding::Rd_),
+            .Rn_ = Decoder::extract<T, Rt>(instr, encoding::Rn_),
+            .Rm_ = Decoder::extract<T, Rt>(instr, encoding::Rm_),
+            .imm_ = Decoder::extract<T, typename instr_type::It>(instr, encoding::imm_)
+        };
+    }
 
 private:
-	template <std::unsigned_integral T>
-	[[nodiscard]] static constexpr auto make_mask(std::size_t s) noexcept -> T {
-		// first turn all the field on; then shift right to obtain the mask
-		// this strategy will eliminates out of range operation
-		T m = bit_set<T>(static_cast<T>(0x0)).value();
-		if (s > sizeof(T) * byte_size) {
-			return m;
-		}
-		return m >> (sizeof(T) * byte_size - s);
-	}
+    template <std::unsigned_integral T>
+    [[nodiscard]] static constexpr auto make_mask(std::size_t s) noexcept -> T {
+        // first turn all the field on; then shift right to obtain the mask
+        // this strategy will eliminates out of range operation
+        T m = bit_set<T>(static_cast<T>(0x0)).value();
+        if (s > sizeof(T) * byte_size) {
+            return m;
+        }
+        return m >> (sizeof(T) * byte_size - s);
+    }
 
-	template <std::unsigned_integral T, std::unsigned_integral Conv>
-	[[nodiscard]] static constexpr auto extract(T instr, typename encoding::field fld) noexcept -> Conv {
-		instr >>= fld.first;
-		return static_cast<Conv>(instr & Decoder::make_mask<T>(fld.second));
-	}
+    template <std::unsigned_integral T, std::unsigned_integral Conv>
+    [[nodiscard]] static constexpr auto extract(T instr, typename encoding::field fld) noexcept -> Conv {
+        instr >>= fld.first;
+        return static_cast<Conv>(instr & Decoder::make_mask<T>(fld.second));
+    }
 };
 
 
@@ -893,167 +1018,167 @@ private:
 
 
 struct Labels {
-	using gp_trans_t = const std::map<GPReg, std::string_view>;
-	using psr_trans_t = const std::unordered_map<PSRReg, char>;
-	using type_trans_t = const std::unordered_map<OpType, std::string_view>;
-	using code_trans_t = const std::unordered_map<OpCode, std::string_view>;
-	using seg_trans_t = const std::unordered_map<SEGReg, std::string_view>;
+    using gp_trans_t = const std::map<GPReg, std::string_view>;
+    using psr_trans_t = const std::unordered_map<PSRReg, char>;
+    using type_trans_t = const std::unordered_map<OpType, std::string_view>;
+    using code_trans_t = const std::unordered_map<OpCode, std::string_view>;
+    using seg_trans_t = const std::unordered_map<SEGReg, std::string_view>;
 
-	gp_trans_t gp_trans_ = {
-		{R0, "R0"}, {R1, "R1"}, {R2, "R2"}, {R3, "R3"}, {R4, "R4"}, {R5, "R5"}, {R6, "R6"},
-		{R7, "R7"}, {R8, "R8"}, {R9, "R9"}, {R10, "R10"}, {R11, "R11"}, {R12, "R12"},
-		{SP, "SP"}, {LR, "LR"}, {PC, "PC"}
-	};
-	psr_trans_t psr_trans_ = {
-		{N, 'N'}, {Z, 'Z'}, {C, 'C'}, {V, 'V'}
-	};
-	type_trans_t type_trans_ = {
-		{R_t, "R_t"}, {I_t, "I_t"}, {U_t, "U_t"}, {S_t, "S_t"}, {J_t, "J_t"}
-	};
-	code_trans_t code_trans_ = {
-		{ADD, "ADD"}, {UMUL, "UMUL"}, {UDIV, "UDIV"}, {UMOL, "UMOL"},
-		{AND, "AND"}, {ORR, "ORR"}, {XOR, "XOR"}, {SHL, "SHL"}, {SHR, "SHR"}, 
-		{RTL, "RTL"}, {RTR, "RTR"}, {NOT, "NOT"},
-		{LDR, "LDR"}, {STR, "STR"}, {PUSH, "PUSH"}, {POP, "POP"},
-		{JMP, "JMP"}, {JZ, "JZ"}, {JN, "JN"}, {JC, "JC"}, {JV, "JV"}, {JZN, "JZN"}, {SYSCALL, "SYSCALL"}
-	};
-	seg_trans_t seg_trans_ = {
-		{CS, "Code Segment"}, {DS, "Data Segment"}, {SS, "Stack Segment"}, {ES, "Extra Segment"}
-	};
+    gp_trans_t gp_trans_ = {
+        {R0, "R0"}, {R1, "R1"}, {R2, "R2"}, {R3, "R3"}, {R4, "R4"}, {R5, "R5"}, {R6, "R6"},
+        {R7, "R7"}, {R8, "R8"}, {R9, "R9"}, {R10, "R10"}, {R11, "R11"}, {R12, "R12"},
+        {SP, "SP"}, {LR, "LR"}, {PC, "PC"}
+    };
+    psr_trans_t psr_trans_ = {
+        {N, 'N'}, {Z, 'Z'}, {C, 'C'}, {V, 'V'}
+    };
+    type_trans_t type_trans_ = {
+        {R_t, "R_t"}, {I_t, "I_t"}, {U_t, "U_t"}, {S_t, "S_t"}, {J_t, "J_t"}
+    };
+    code_trans_t code_trans_ = {
+        {ADD, "ADD"}, {UMUL, "UMUL"}, {UDIV, "UDIV"}, {UMOL, "UMOL"},
+        {AND, "AND"}, {ORR, "ORR"}, {XOR, "XOR"}, {SHL, "SHL"}, {SHR, "SHR"}, 
+        {RTL, "RTL"}, {RTR, "RTR"}, {NOT, "NOT"},
+        {LDR, "LDR"}, {STR, "STR"}, {PUSH, "PUSH"}, {POP, "POP"},
+        {JMP, "JMP"}, {JZ, "JZ"}, {JN, "JN"}, {JC, "JC"}, {JV, "JV"}, {JZN, "JZN"}, {SYSCALL, "SYSCALL"}
+    };
+    seg_trans_t seg_trans_ = {
+        {CS, "Code Segment"}, {DS, "Data Segment"}, {SS, "Stack Segment"}, {ES, "Extra Segment"}
+    };
 };
 
 // Tracer class is responsible for recording the state of the CPU after each instruction is executed.
 class Tracer {
 public:
-	// Tracer must be created with a valid file path
-	[[nodiscard]] explicit Tracer(const std::filesystem::path& path) :
-		trace_file_(std::filesystem::absolute(path).c_str()), 
-		inst_count{0}, labels_{} {
-		if (!trace_file_.is_open()) {
-			throw std::filesystem::filesystem_error("Error: Failed to create / open the tracer file!",
-				std::error_code(1, std::system_category()));
-		}
-	}
+    // Tracer must be created with a valid file path
+    [[nodiscard]] explicit Tracer(const std::filesystem::path& path) :
+        trace_file_(std::filesystem::absolute(path).c_str()), 
+        inst_count{0}, labels_{} {
+        if (!trace_file_.is_open()) {
+            throw std::filesystem::filesystem_error("Error: Failed to create / open the tracer file!",
+                std::error_code(1, std::system_category()));
+        }
+    }
 
-	enum struct LogCriticalLvls : std::int8_t {
-		INFO,
-		WARNING,
-		ERROR
-	};
+    enum struct LogCriticalLvls : std::int8_t {
+        INFO,
+        WARNING,
+        ERROR
+    };
 
-	// The main error logging method
-	template <Tracer::LogCriticalLvls lvl, std::derived_from<std::exception> Except>
-	auto log(const std::string_view& msg) -> void {
-		auto get_msg_prefix = [](Tracer::LogCriticalLvls lvl) -> std::string_view {
-			switch (lvl) {
-				case Tracer::LogCriticalLvls::INFO:		return "INFO: ";
-				case Tracer::LogCriticalLvls::WARNING:	return "WARNING: ";
-				case Tracer::LogCriticalLvls::ERROR:	return "ERROR: ";
-				default: throw std::runtime_error("Error: Unrecoganized log critical level!");
-			}
-		};
-		trace_file_ << get_msg_prefix(lvl) << msg << '\n';
-		if (lvl == Tracer::LogCriticalLvls::ERROR) {
-			trace_file_.close();
-			throw Except(msg.data());
-		}
-	}
+    // The main error logging method
+    template <Tracer::LogCriticalLvls lvl, std::derived_from<std::exception> Except>
+    auto log(const std::string_view& msg) -> void {
+        auto get_msg_prefix = [](Tracer::LogCriticalLvls lvl) -> std::string_view {
+            switch (lvl) {
+                case Tracer::LogCriticalLvls::INFO:		return "INFO: ";
+                case Tracer::LogCriticalLvls::WARNING:	return "WARNING: ";
+                case Tracer::LogCriticalLvls::ERROR:	return "ERROR: ";
+                default: throw std::runtime_error("Error: Unrecoganized log critical level!");
+            }
+        };
+        trace_file_ << get_msg_prefix(lvl) << msg << '\n';
+        if (lvl == Tracer::LogCriticalLvls::ERROR) {
+            trace_file_.close();
+            throw Except(msg.data());
+        }
+    }
 
-	// The main trace logging method
-	template <std::unsigned_integral T, class Ins, class Mem, class Reg, class Seg>
-	auto generate_trace(T binary, const std::add_lvalue_reference_t<Ins> instr,
-		const std::add_lvalue_reference_t<Mem> memory, const std::add_lvalue_reference_t<Reg> registers,
-		const std::add_lvalue_reference_t<Seg> segments) noexcept -> void {
-		// record instruction number
-		trace_file_ << get_heading(binary);
-		trace_file_ << get_instr<Ins>(instr);
-		trace_file_ << get_reg<Reg>(registers);
-		trace_file_ << get_mem<Mem, Seg>(memory, segments);
-		trace_file_ << '\n';
-		++inst_count;
-	}
-
-private:
-	template <class Mem, class Seg>
-	auto get_mem(const std::add_lvalue_reference_t<Mem> mem, const std::add_lvalue_reference_t<Seg> seg)
-		-> std::string {
-		std::stringstream ss_seg{}, ss_value{};
-		for (const auto& p : seg) {
-			try {
-				ss_seg << labels_.seg_trans_.at(static_cast<SEGReg>(p.first));
-			}
-			catch (const std::out_of_range&) {
-				Tracer::log<Tracer::LogCriticalLvls::ERROR, std::out_of_range>(
-					"Error: Tracer::seg_trans_ - No corresponding translation!");
-			}
-			for (auto i{ p.second.first }; i <= p.second.second; ++i) {
-				ss_value << static_cast<std::uint32_t>(mem.read_slot(i).value()) << ',';
-			}
-			formatter(ss_seg, ss_value);
-		}
-		return ss_seg.str();
-	}
-
-	template <class Reg>
-	auto get_reg(const std::add_lvalue_reference_t<Reg> regs) const noexcept -> std::string {
-		std::stringstream ss_label{}, ss_value{};
-		std::ranges::for_each(labels_.gp_trans_, [&](const auto p)->void {
-			ss_label << p.second << ','; ss_value << regs.GP(p.first) << ','; });
-		formatter(ss_label, ss_value);
-		std::ranges::for_each(labels_.psr_trans_, [&](const auto p)->void {
-			ss_label << p.second << ','; ss_value << regs.PSR(p.first) << ','; });
-		formatter(ss_label, ss_value);
-		return ss_label.str();
-	}
-
-	static auto formatter(std::stringstream& l, std::stringstream& v) noexcept -> void {
-		l << '\n';
-		v << '\n';
-		l << v.str();
-		v.str(std::string{});
-	}
-
-	template <class Ins>
-	auto get_instr(const std::add_lvalue_reference_t<Ins> inst) -> std::string {
-		std::stringstream ss_label{}, ss_value{};
-		const std::array<std::string_view, 6> l{"OpType", "OpCode", "Rd", "Rm", "Rn", "Imm"};
-		const std::array<typename Ins::Rt, 3> regs{inst.Rd_, inst.Rm_, inst.Rn_};
-		std::ranges::for_each(l, [&ss_label](const auto v)->void {ss_label << v << ','; });
-		ss_label << '\n';
-		try {
-			ss_value << labels_.type_trans_.at(static_cast<OpType>(inst.type_)) << ',';
-			ss_value << labels_.code_trans_.at(static_cast<OpCode>(inst.code_)) << ',';
-			std::ranges::for_each(regs, [this, &ss_value](const auto v)->void {
-				ss_value << labels_.gp_trans_.at(static_cast<GPReg>(v)) << ','; });
-		}
-		catch (const std::out_of_range&) {
-			Tracer::log<Tracer::LogCriticalLvls::ERROR, std::out_of_range>(
-				"Error: Tracer::type_trans_ / Tracer::code_trans_ / Tracer::gp_trans_ "
-				"- No corresponding translation!"
-			);
-		}
-		// immediate value
-		ss_value << static_cast<std::uint32_t>(inst.imm_) << '\n';
-		ss_label << ss_value.str();
-		return ss_label.str();
-	}
-
-	template <std::unsigned_integral T>
-	static auto get_heading(T binary) noexcept -> std::string {
-		std::stringstream ss;
-		ss << "Instruction #, 0x" << std::setfill('0') << std::setw(sizeof(T) * 2)
-			<< std::hex << binary << '\n';
-		return ss.str();
-	}
+    // The main trace logging method
+    template <std::unsigned_integral T, class Ins, class Mem, class Reg, class Seg>
+    auto generate_trace(T binary, const std::add_lvalue_reference_t<Ins> instr,
+        const std::add_lvalue_reference_t<Mem> memory, const std::add_lvalue_reference_t<Reg> registers,
+        const std::add_lvalue_reference_t<Seg> segments) noexcept -> void {
+        // record instruction number
+        trace_file_ << get_heading(binary);
+        trace_file_ << get_instr<Ins>(instr);
+        trace_file_ << get_reg<Reg>(registers);
+        trace_file_ << get_mem<Mem, Seg>(memory, segments);
+        trace_file_ << '\n';
+        ++inst_count;
+    }
 
 private:
-	std::ofstream	trace_file_;
+    template <class Mem, class Seg>
+    auto get_mem(const std::add_lvalue_reference_t<Mem> mem, const std::add_lvalue_reference_t<Seg> seg)
+        -> std::string {
+        std::stringstream ss_seg{}, ss_value{};
+        for (const auto& p : seg) {
+            try {
+                ss_seg << labels_.seg_trans_.at(static_cast<SEGReg>(p.first));
+            }
+            catch (const std::out_of_range&) {
+                Tracer::log<Tracer::LogCriticalLvls::ERROR, std::out_of_range>(
+                    "Error: Tracer::seg_trans_ - No corresponding translation!");
+            }
+            for (auto i{ p.second.first }; i <= p.second.second; ++i) {
+                ss_value << static_cast<std::uint32_t>(mem.read_slot(i).value()) << ',';
+            }
+            formatter(ss_seg, ss_value);
+        }
+        return ss_seg.str();
+    }
 
-	// instruction counter: count the number of instructions executed
-	std::uint32_t	inst_count;
+    template <class Reg>
+    auto get_reg(const std::add_lvalue_reference_t<Reg> regs) const noexcept -> std::string {
+        std::stringstream ss_label{}, ss_value{};
+        std::ranges::for_each(labels_.gp_trans_, [&](const auto p)->void {
+            ss_label << p.second << ','; ss_value << regs.GP(p.first) << ','; });
+        formatter(ss_label, ss_value);
+        std::ranges::for_each(labels_.psr_trans_, [&](const auto p)->void {
+            ss_label << p.second << ','; ss_value << regs.PSR(p.first) << ','; });
+        formatter(ss_label, ss_value);
+        return ss_label.str();
+    }
 
-	// the label class which maps integers to label as strings
-	const Labels	labels_{};
+    static auto formatter(std::stringstream& l, std::stringstream& v) noexcept -> void {
+        l << '\n';
+        v << '\n';
+        l << v.str();
+        v.str(std::string{});
+    }
+
+    template <class Ins>
+    auto get_instr(const std::add_lvalue_reference_t<Ins> inst) -> std::string {
+        std::stringstream ss_label{}, ss_value{};
+        const std::array<std::string_view, 6> l{"OpType", "OpCode", "Rd", "Rm", "Rn", "Imm"};
+        const std::array<typename Ins::Rt, 3> regs{inst.Rd_, inst.Rm_, inst.Rn_};
+        std::ranges::for_each(l, [&ss_label](const auto v)->void {ss_label << v << ','; });
+        ss_label << '\n';
+        try {
+            ss_value << labels_.type_trans_.at(static_cast<OpType>(inst.type_)) << ',';
+            ss_value << labels_.code_trans_.at(static_cast<OpCode>(inst.code_)) << ',';
+            std::ranges::for_each(regs, [this, &ss_value](const auto v)->void {
+                ss_value << labels_.gp_trans_.at(static_cast<GPReg>(v)) << ','; });
+        }
+        catch (const std::out_of_range&) {
+            Tracer::log<Tracer::LogCriticalLvls::ERROR, std::out_of_range>(
+                "Error: Tracer::type_trans_ / Tracer::code_trans_ / Tracer::gp_trans_ "
+                "- No corresponding translation!"
+            );
+        }
+        // immediate value
+        ss_value << static_cast<std::uint32_t>(inst.imm_) << '\n';
+        ss_label << ss_value.str();
+        return ss_label.str();
+    }
+
+    template <std::unsigned_integral T>
+    static auto get_heading(T binary) noexcept -> std::string {
+        std::stringstream ss;
+        ss << "Instruction #, 0x" << std::setfill('0') << std::setw(sizeof(T) * 2)
+            << std::hex << binary << '\n';
+        return ss.str();
+    }
+
+private:
+    std::ofstream	trace_file_;
+
+    // instruction counter: count the number of instructions executed
+    std::uint32_t	inst_count;
+
+    // the label class which maps integers to label as strings
+    const Labels	labels_{};
 };
 
 
@@ -1068,77 +1193,77 @@ private:
 
 
 struct SyscallTable {
-	template <class Mem, class Reg>
-	inline static const std::unordered_map<std::uint32_t,
-		std::function<void(std::add_lvalue_reference_t<Mem>, std::add_lvalue_reference_t<Reg>)>
-	> syscall_table_ {
-		{0, SyscallTable::template welcome<Mem, Reg>},
-		{1, SyscallTable::template console_out<Mem, Reg>},
-		{2, SyscallTable::template console_in<Mem, Reg>}
-	};
+    template <class Mem, class Reg>
+    inline static const std::unordered_map<std::uint32_t,
+        std::function<void(std::add_lvalue_reference_t<Mem>, std::add_lvalue_reference_t<Reg>)>
+    > syscall_table_ {
+        {0, SyscallTable::template welcome<Mem, Reg>},
+        {1, SyscallTable::template console_out<Mem, Reg>},
+        {2, SyscallTable::template console_in<Mem, Reg>}
+    };
 
 private:
-	template <class Mem, class Reg>
-	static constexpr auto welcome(std::add_lvalue_reference_t<Mem>, std::add_lvalue_reference_t<Reg>) noexcept -> void {
-		printf(
-			"Welcome stranger!\n\n"
-			"This is the CPU speaking - I'm glad that you found this eastern egg left by my creator.\n"
-			"If you see this message, it means that you must be browsing through the code or experimenting with me.\n"
-			"I hope you have the same enthusiasm with C++ as my creator does - because enthusiasm is the "
-			"most important thing in the world.\n\n"
-			"Well, wish you a good day. Bye, adios!\n"
-		);
-	}
+    template <class Mem, class Reg>
+    static constexpr auto welcome(std::add_lvalue_reference_t<Mem>, std::add_lvalue_reference_t<Reg>) noexcept -> void {
+        printf(
+            "Welcome stranger!\n\n"
+            "This is the CPU speaking - I'm glad that you found this eastern egg left by my creator.\n"
+            "If you see this message, it means that you must be browsing through the code or experimenting with me.\n"
+            "I hope you have the same enthusiasm with C++ as my creator does - because enthusiasm is the "
+            "most important thing in the world.\n\n"
+            "Well, wish you a good day. Bye, adios!\n"
+        );
+    }
 
-	/*
-	* Doc-string:
-	* The console_out() function allow user to print text on terminal.
-	* @inputs:
-	*	- R0: the starting addr of a contigious memory (string) that will be displayed;
-	*	- R1: the length of contigious memory;
-	* @outputs:
-	*	- None
-	*/
-	template <class Mem, class Reg>
-	static auto console_out(std::add_lvalue_reference_t<Mem> mem, std::add_lvalue_reference_t<Reg> reg) -> void {
-		std::string tmp;
-		tmp.reserve(reg.GP(R1));
-		for (auto i{ reg.GP(R0) }; i < (reg.GP(R0) + reg.GP(R1)); ++i) {
-			if (auto op = mem.read_slot(i); op.has_value()) {
-				tmp.push_back(op.value());
-			} else {
-				throw std::out_of_range("Error: Memory access out of range!");
-			}
-		}
-		// print out the content of tmp
-		std::cout << tmp;
-	}
+    /*
+    * Doc-string:
+    * The console_out() function allow user to print text on terminal.
+    * @inputs:
+    *	- R0: the starting addr of a contigious memory (string) that will be displayed;
+    *	- R1: the length of contigious memory;
+    * @outputs:
+    *	- None
+    */
+    template <class Mem, class Reg>
+    static auto console_out(std::add_lvalue_reference_t<Mem> mem, std::add_lvalue_reference_t<Reg> reg) -> void {
+        std::string tmp;
+        tmp.reserve(reg.GP(R1));
+        for (auto i{ reg.GP(R0) }; i < (reg.GP(R0) + reg.GP(R1)); ++i) {
+            if (auto op = mem.read_slot(i); op.has_value()) {
+                tmp.push_back(op.value());
+            } else {
+                throw std::out_of_range("Error: Memory access out of range!");
+            }
+        }
+        // print out the content of tmp
+        std::cout << tmp;
+    }
 
-	/*
-	* Doc-string:
-	* The console_in() function allow user to input string with keyboard.
-	* @inputs:
-	*	- R0: the starting addr of a contigious memory that will be filled;
-	*	- R1: the length of contigious memory;
-	* @outputs:
-	*	- User input string will be placed in the contigious memory. All spaces will be rewritten.
-	*	  Thus please make sure to save necessary contents on the stack before doing the operation.
-	*/
-	template <class Mem, class Reg>
-	static auto console_in(std::add_lvalue_reference_t<Mem> mem, std::add_lvalue_reference_t<Reg> reg) -> void {
-		std::string tmp;
-		std::getline(std::cin, tmp);
-		if (tmp.length() > reg.GP(R1)) {
-			throw std::length_error("Error: User-input string exceeds maximum space length!");
-		}
-		// place the string sequentially into memory
-		std::ranges::for_each(tmp,
-			[idx = reg.GP(R0), &mem](auto ch) mutable noexcept -> void {
-				mem.write_slot(ch, idx);
-				++idx;
-			}
-		);
-	}
+    /*
+    * Doc-string:
+    * The console_in() function allow user to input string with keyboard.
+    * @inputs:
+    *	- R0: the starting addr of a contigious memory that will be filled;
+    *	- R1: the length of contigious memory;
+    * @outputs:
+    *	- User input string will be placed in the contigious memory. All spaces will be rewritten.
+    *	  Thus please make sure to save necessary contents on the stack before doing the operation.
+    */
+    template <class Mem, class Reg>
+    static auto console_in(std::add_lvalue_reference_t<Mem> mem, std::add_lvalue_reference_t<Reg> reg) -> void {
+        std::string tmp;
+        std::getline(std::cin, tmp);
+        if (tmp.length() > reg.GP(R1)) {
+            throw std::length_error("Error: User-input string exceeds maximum space length!");
+        }
+        // place the string sequentially into memory
+        std::ranges::for_each(tmp,
+            [idx = reg.GP(R0), &mem](auto ch) mutable noexcept -> void {
+                mem.write_slot(ch, idx);
+                ++idx;
+            }
+        );
+    }
 };
 
 
@@ -1167,375 +1292,375 @@ concept is_valid_data = std::convertible_to<T, Sy> && (std::same_as<T, Ts> || ..
 template <std::unsigned_integral B, std::size_t S, class SysT>
 class Core {
 public:
-	using sysb = B;						// system bit
-	const std::size_t mem_size = S;		// memory size
+    using sysb = B;						// system bit
+    const std::size_t mem_size = S;		// memory size
 
-	// components
-	using memory	= memory<sysb, S>;
-	using registers = Registers<sysb>;
-	using decoder	= Decoder<default_encoding>;
-	using alu		= ALU;
+    // components
+    using memory	= memory<sysb, S>;
+    using registers = Registers<sysb>;
+    using decoder	= Decoder<default_encoding>;
+    using alu		= ALU;
 
-	// sub-components
-	using instruct  = typename decoder::instr_type;
-	using alu_in	= ALU_in<sysb>;
-	using alu_out	= ALU_out<sysb>;
+    // sub-components
+    using instruct  = typename decoder::instr_type;
+    using alu_in	= ALU_in<sysb>;
+    using alu_out	= ALU_out<sysb>;
 
-	// helper definition
-	using segment = std::unordered_map<SEGReg, std::pair<sysb, sysb>>;
-	using syscall = SysT;
+    // helper definition
+    using segment = std::unordered_map<SEGReg, std::pair<sysb, sysb>>;
+    using syscall = SysT;
 
-	// memory layout
-	/*
-	*  _________________  <----------- Top
-	* |_________________|
-	* |					| \
-	* |	 Extra Segment  | | 64KB (magic fields :)
-	* |_________________| /<----------- ES reg
-	* |_________________|
-	* |				    | \
-	* |					| |
-	* |	 Stack Segment  | | 64KB
-	* |					| |
-	* |					| |
-	* |_________________| / <----------- SS reg
-	* |_________________|
-	* |					| \
-	* |	  Data Segment  | | 64KB
-	* |					| |
-	* |_________________| / <----------- DS reg
-	* |_________________|
-	* |					| \
-	* |	  Code Segment  | | 64KB
-	* |_________________| / <---------- CS reg
-	* |_________________| <----------- Bottom (vector table or nullptr)
-	*/
+    // memory layout
+    /*
+    *  _________________  <----------- Top
+    * |_________________|
+    * |					| \
+    * |	 Extra Segment  | | 64KB (magic fields :)
+    * |_________________| /<----------- ES reg
+    * |_________________|
+    * |				    | \
+    * |					| |
+    * |	 Stack Segment  | | 64KB
+    * |					| |
+    * |					| |
+    * |_________________| / <----------- SS reg
+    * |_________________|
+    * |					| \
+    * |	  Data Segment  | | 64KB
+    * |					| |
+    * |_________________| / <----------- DS reg
+    * |_________________|
+    * |					| \
+    * |	  Code Segment  | | 64KB
+    * |_________________| / <---------- CS reg
+    * |_________________| <----------- Bottom (vector table or nullptr)
+    */
 
-	// Initialize segment registers and define size for each segment
-	// Initialize values for GP registers
-	template <typename SG>
-		requires std::same_as<segment, std::remove_reference_t<SG>>
-	constexpr auto init(SG&& seg_config) noexcept -> bool {
-		// check if the config contains all needed field
-		constexpr std::array<SEGReg, 4> seg_regs{ CS, DS, SS, ES };
-		if (!std::ranges::all_of(seg_regs, [&seg_config](SEGReg sr) -> bool {return seg_config.contains(sr);})) {
-			return false;
-		}
-		// segment overlap is not allowed!
-		auto overlap = []<typename T>(const std::pair<T, T>& r1, decltype(r1) r2) -> bool {
-			return r1.first <= r2.second && r2.first <= r1.second;
-		};
-		using value_type = typename segment::mapped_type;
-		std::vector<value_type> rngs{};
-		rngs.reserve(4);
-		for (auto&& r : seg_config) {
-			rngs.emplace_back(r.second);
-		}
-		// check if the start and end addr for each segment is in the range
-		if (!std::ranges::all_of(rngs, [this](const value_type& p) -> bool {
-			return p.second >= p.first && (p.second >= 0 && p.second < Core::mem_size);})
-			) {
-			return false;
-		}
-		// sort by starting index
-		std::ranges::sort(rngs, std::ranges::less{}, [](const value_type& r) {return r.first; });
-		for (auto it = rngs.cbegin() + 1; it != rngs.cend(); ++it) {
-			if (overlap(*(it - 1), *it)) {
-				return false;
-			}
-		}
-		// total segments size should be <= mem_size
-		if (sysb res = std::accumulate(rngs.begin(), rngs.end(), 0,
-			[](sysb&& i, const value_type& p) {return i + (p.second - p.first) + 1;});
-			res > mem_size) {
-			return false;
-		}
-		segments_ = std::forward<SG>(seg_config);
-		// configure SP register to the highest addr in the seg
-		registers_.GP(SP) = segments_.at(SS).second + 1;
-		// configure PC register to the lowest addr in the seg
-		registers_.GP(PC) = segments_.at(CS).first;
-		return true;
-	}
+    // Initialize segment registers and define size for each segment
+    // Initialize values for GP registers
+    template <typename SG>
+        requires std::same_as<segment, std::remove_reference_t<SG>>
+    constexpr auto init(SG&& seg_config) noexcept -> bool {
+        // check if the config contains all needed field
+        constexpr std::array<SEGReg, 4> seg_regs{ CS, DS, SS, ES };
+        if (!std::ranges::all_of(seg_regs, [&seg_config](SEGReg sr) -> bool {return seg_config.contains(sr);})) {
+            return false;
+        }
+        // segment overlap is not allowed!
+        auto overlap = []<typename T>(const std::pair<T, T>& r1, decltype(r1) r2) -> bool {
+            return r1.first <= r2.second && r2.first <= r1.second;
+        };
+        using value_type = typename segment::mapped_type;
+        std::vector<value_type> rngs{};
+        rngs.reserve(4);
+        for (auto&& r : seg_config) {
+            rngs.emplace_back(r.second);
+        }
+        // check if the start and end addr for each segment is in the range
+        if (!std::ranges::all_of(rngs, [this](const value_type& p) -> bool {
+            return p.second >= p.first && (p.second >= 0 && p.second < Core::mem_size);})
+            ) {
+            return false;
+        }
+        // sort by starting index
+        std::ranges::sort(rngs, std::ranges::less{}, [](const value_type& r) {return r.first; });
+        for (auto it = rngs.cbegin() + 1; it != rngs.cend(); ++it) {
+            if (overlap(*(it - 1), *it)) {
+                return false;
+            }
+        }
+        // total segments size should be <= mem_size
+        if (sysb res = std::accumulate(rngs.begin(), rngs.end(), 0,
+            [](sysb&& i, const value_type& p) {return i + (p.second - p.first) + 1;});
+            res > mem_size) {
+            return false;
+        }
+        segments_ = std::forward<SG>(seg_config);
+        // configure SP register to the highest addr in the seg
+        registers_.GP(SP) = segments_.at(SS).second + 1;
+        // configure PC register to the lowest addr in the seg
+        registers_.GP(PC) = segments_.at(CS).first;
+        return true;
+    }
 
-	// This ctor overload is used when no tracer is provided
-	template <typename SG> requires std::same_as<segment, std::remove_reference_t<SG>>
-	[[nodiscard]] constexpr explicit Core(SG&& seg_config)
-		: tracer_{nullptr} {
-		if (!this->init(std::forward<SG>(seg_config))) {
-			trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-				"Error: Failed to initialize segments!");
-		}
-	}
+    // This ctor overload is used when no tracer is provided
+    template <typename SG> requires std::same_as<segment, std::remove_reference_t<SG>>
+    [[nodiscard]] constexpr explicit Core(SG&& seg_config)
+        : tracer_{nullptr} {
+        if (!this->init(std::forward<SG>(seg_config))) {
+            trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+                "Error: Failed to initialize segments!");
+        }
+    }
 
-	// This ctor overload is used when tracer is provided
-	template <typename SG> requires std::same_as<segment, std::remove_reference_t<SG>>
-	[[nodiscard]] constexpr explicit Core(
-		SG&& seg_config,
-		Tracer* tracer
-	) : tracer_{ tracer } {
-		if (!this->init(std::forward<SG>(seg_config))) {
-			trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-				"Error: Failed to initialize segments!");
-		}
-	}
+    // This ctor overload is used when tracer is provided
+    template <typename SG> requires std::same_as<segment, std::remove_reference_t<SG>>
+    [[nodiscard]] constexpr explicit Core(
+        SG&& seg_config,
+        Tracer* tracer
+    ) : tracer_{ tracer } {
+        if (!this->init(std::forward<SG>(seg_config))) {
+            trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+                "Error: Failed to initialize segments!");
+        }
+    }
 
-	// Instruction loader
-	template <typename T, typename... Ts> requires is_valid_data<sysb, T, Ts...>
-	constexpr auto load_instr(T in, Ts... ins) noexcept -> void {
-		r_load(segments_.at(CS).first, segments_.at(CS).second, in, ins...);
-	}
-	// Data loader
-	template <typename T, typename... Ts> requires is_valid_data<sysb, T, Ts...>
-	constexpr auto load_data(T in, Ts... ins) noexcept -> void {
-		r_load(segments_.at(DS).first, segments_.at(DS).second, in, ins...);
-	}
+    // Instruction loader
+    template <typename T, typename... Ts> requires is_valid_data<sysb, T, Ts...>
+    constexpr auto load_instr(T in, Ts... ins) noexcept -> void {
+        r_load(segments_.at(CS).first, segments_.at(CS).second, in, ins...);
+    }
+    // Data loader
+    template <typename T, typename... Ts> requires is_valid_data<sysb, T, Ts...>
+    constexpr auto load_data(T in, Ts... ins) noexcept -> void {
+        r_load(segments_.at(DS).first, segments_.at(DS).second, in, ins...);
+    }
 
-	// Core function
-	constexpr auto run() -> void {
-		for (;;) {
-			auto bin = fetch();
-			// terminate condition
-			if (bit_test_all(bin)) {
-				break;
-			}
-			instruct inst = decoder::decode(bin);
-			// treat jumps
-			if (check_jump(inst)) {
-				generate_trace(bin, inst);
-				continue;
-			}
-			auto result = execute(inst);
-			mem_access(inst, result);
-			generate_trace(bin, inst);
-		}
-	}
-
-private:
-	// log message and error reporting
-	template <Tracer::LogCriticalLvls lvl, std::derived_from<std::exception> Except>
-	constexpr auto trace_log(const std::string_view& msg) const -> void {
-		if (tracer_ != nullptr) {
-			tracer_->log<lvl, Except>(msg);
-			return;
-		}
-		if (lvl == Tracer::LogCriticalLvls::ERROR) {
-			throw Except(msg.data());
-		}
-	}
-
-	// create trace log
-	constexpr auto generate_trace(sysb bin, instruct& inst) noexcept -> void {
-		if (tracer_ != nullptr) {
-			tracer_->generate_trace<
-				sysb, instruct, memory, registers, segment
-			>(bin, inst, memory_, registers_, segments_);
-		}
-	}
-
-	// fetch unit
-	[[nodiscard]] constexpr auto fetch() -> sysb {
-		if (!Core::in_range<sysb>(registers_.GP(PC), segments_.at(CS))) {
-			trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-				"Error: PC exceeds CS boundary!");
-		}
-		if (auto instr = memory_.read_slot(registers_.GP(PC)); instr.has_value()) {
-			++registers_.GP(PC);
-			return instr.value();
-		}
-		trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-			"Error: Failed to read instruction from memory!");
-		// dummy return value to silent compiler warning
-		return 0;
-	}
-
-	// execute unit
-	[[nodiscard]] constexpr auto execute(const instruct& instr) -> typename alu_out::op_size {
-		alu_out out = alu::exec<typename alu_in::op_size>(gen_ALUIn(instr));
-		update_psr(out.Flags_);
-		return out.Res_;
-	}
-
-	// memory access and write back
-	constexpr auto mem_access(const instruct& instr, sysb v) -> void {
-		switch (instr.code_) {
-		// only LDR, STR, PUSH, and POP will access memory;
-		case LDR: {
-			if (auto m = memory_.read_slot(v); m.has_value()) {
-				registers_.GP(instr.Rd_) = m.value();
-			} else {
-				trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-					"Error: Invalid memory access!");
-			}
-			break;
-		} 
-		case STR: {
-			if (!memory_.write_slot(registers_.GP(instr.Rd_), v)) {
-				trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-					"Error: Invalid memory access!");
-			}
-			break;
-		}
-		case PUSH: {
-			if (!Core::in_range(v, segments_.at(SS))) {
-				trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>("Error: Stackoverflow!");
-			}
-			memory_.write_slot(registers_.GP(instr.Rd_), v);
-			registers_.GP(SP) = v;
-			break;
-		} 
-		case POP: {
-			if (!Core::in_range(v - 1, segments_.at(SS))) {
-				return;
-			}
-			if (auto m = memory_.read_slot(registers_.GP(SP)); m.has_value()) {
-				registers_.GP(instr.Rd_) = m.value();
-				registers_.GP(SP) = v;
-			} else {
-				trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>("Error: Invalid memory access!");
-			}
-			break;
-		}
-		// for other instructions, "v" is the result that needs to be write back to Rd
-		default: {
-			registers_.GP(instr.Rd_) = v;
-			break;
-		}
-		}
-	}
-
-	// check jump condition before ALU
-	// if is jump instruction, then return true, else return false
-	constexpr auto check_jump(const instruct& ins) -> bool {
-		if (ins.type_ != J_t) {
-			return false;
-		}
-		// lambda function to perform jump
-		auto perform_jump = [this](bool cond, typename registers::gp_width dst)
-			noexcept -> void {
-			if (cond) {
-				registers_.GP(PC) = dst;
-			}
-		};
-		switch (ins.code_) {
-			case JMP:	perform_jump(true,				ins.imm_);		break;
-			case JZ:	perform_jump(registers_.PSR(Z), ins.imm_);		break;
-			case JN:	perform_jump(registers_.PSR(N), ins.imm_);		break;
-			case JC:	perform_jump(registers_.PSR(C), ins.imm_);		break;
-			case JV:	perform_jump(registers_.PSR(V), ins.imm_);		break;
-			case JZN:	perform_jump(registers_.PSR(Z) || 
-									 registers_.PSR(N), ins.imm_);		break;
-			case SYSCALL: {
-				try {
-					syscall::template syscall_table_<Core::memory, Core::registers>.at(
-						static_cast<std::uint32_t>(ins.imm_))
-						(this->memory_, this->registers_);
-				}
-				catch (const std::out_of_range&) {
-					trace_log<Tracer::LogCriticalLvls::ERROR, std::out_of_range>(
-						"Error: Unrecoganized SYSCALL number!");
-				}
-				break;
-			}
-			default:
-				trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-					"Error: Unrecoganized instruction type detected!");
-				break;
-		}
-		return true;
-	}
-
-	// generate alu_in based on the instruction
-	constexpr auto gen_ALUIn(const instruct& ins) const -> alu_in {
-		// J-type instruction should not go through
-		if (ins.type_ == J_t) {
-			trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>("Error: Jump-type instruction fall through!");
-		}
-		// lambda function to help create ALU input for R & I type instruction
-		auto make_ALUIn_RI = [this](const instruct & ins, ALU_OpCode op) -> alu_in {
-			switch (ins.type_) {
-				case R_t:	return make_ALUIn<sysb>(op, registers_.GP(ins.Rm_), registers_.GP(ins.Rn_));
-				case I_t:	return make_ALUIn<sysb>(op, registers_.GP(ins.Rm_), ins.imm_);
-				default:	trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-								"Error: Unrecoganized instruction type detected!");
-			}
-			// dummy return value to silent compiler warning
-			return alu_in{};
-		};
-		switch (ins.code_) {
-			// Arithmetic Ops
-			case ADD:		return make_ALUIn_RI(ins, ALU_OpCode::ADD);
-			case UMUL:		return make_ALUIn_RI(ins, ALU_OpCode::UMUL);
-			case UDIV:		return make_ALUIn_RI(ins, ALU_OpCode::UDIV);
-			case UMOL:		return make_ALUIn_RI(ins, ALU_OpCode::UMOL);
-			// Binary Logical Ops
-			case AND:		return make_ALUIn_RI(ins, ALU_OpCode::AND);
-			case ORR:		return make_ALUIn_RI(ins, ALU_OpCode::ORR);
-			case XOR:		return make_ALUIn_RI(ins, ALU_OpCode::XOR);
-			case SHL:		return make_ALUIn_RI(ins, ALU_OpCode::SHL);
-			case SHR:		return make_ALUIn_RI(ins, ALU_OpCode::SHR);
-			case RTL:		return make_ALUIn_RI(ins, ALU_OpCode::RTL);
-			case RTR:		return make_ALUIn_RI(ins, ALU_OpCode::RTR);
-			// Uniary Logical Ops
-			// for uniary operations, only the first operand is used, second is discarded (0x0)
-			case NOT:		return make_ALUIn<sysb>(ALU_OpCode::COMP, registers_.GP(ins.Rm_), 0x0);
-			// Load and Store Ops
-			case LDR:		return make_ALUIn<sysb>(ALU_OpCode::PASS, registers_.GP(ins.Rm_), 0x0);
-			case STR:		return make_ALUIn<sysb>(ALU_OpCode::PASS, registers_.GP(ins.Rm_), 0x0);
-			// Stack Ops
-			case PUSH:		return make_ALUIn<sysb>(ALU_OpCode::ADD, registers_.GP(SP), -1);
-			case POP:		return make_ALUIn<sysb>(ALU_OpCode::ADD, registers_.GP(SP),  1);
-			default:		trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-								"Error: Unrecoganized instruction type detected!");
-		}
-		// dummy return value to silent compiler warning
-		return alu_in{};
-	}
-
-	// helper function to create ALU_in
-	template <std::convertible_to<typename alu_in::op_size> T>
-	inline static constexpr auto make_ALUIn(ALU_OpCode alu_op, T op1, T op2) noexcept
-		-> alu_in {
-		return alu_in{
-			alu_op,
-			{op1, op2}
-		};
-	}
-
-	// set psr flags
-	constexpr auto update_psr(const typename alu_out::flag_type& flags) noexcept -> void {
-		// Note: alu_out::flag_type == unordered_set<std::uint8_t>;
-		registers_.clear_psr();
-		for (auto&& F : flags) {
-			registers_.PSR(F, true);
-		}
-	}
-
-	// I-loader & D-loader helper
-	template <typename T, typename... Ts>
-	constexpr auto r_load(std::size_t idx, std::size_t lim, T x, Ts... xs) noexcept -> void {
-		if (idx > lim) {
-			return;
-		}
-		memory_.write_slot(static_cast<sysb>(x), idx);
-		if constexpr (sizeof...(Ts) > 0) {
-			r_load(idx + 1, lim, xs...);
-		}
-	}
-
-	// validate addr with segment size
-	template <std::unsigned_integral T>
-	[[nodiscard]] inline static constexpr auto in_range(T p, const std::pair<T, T>& seg) noexcept -> bool {
-		return p >= seg.first && p <= seg.second;
-	}
+    // Core function
+    constexpr auto run() -> void {
+        for (;;) {
+            auto bin = fetch();
+            // terminate condition
+            if (bit_test_all(bin)) {
+                break;
+            }
+            instruct inst = decoder::decode(bin);
+            // treat jumps
+            if (check_jump(inst)) {
+                generate_trace(bin, inst);
+                continue;
+            }
+            auto result = execute(inst);
+            mem_access(inst, result);
+            generate_trace(bin, inst);
+        }
+    }
 
 private:
-	memory		memory_{};
-	registers	registers_{};
+    // log message and error reporting
+    template <Tracer::LogCriticalLvls lvl, std::derived_from<std::exception> Except>
+    constexpr auto trace_log(const std::string_view& msg) const -> void {
+        if (tracer_ != nullptr) {
+            tracer_->log<lvl, Except>(msg);
+            return;
+        }
+        if (lvl == Tracer::LogCriticalLvls::ERROR) {
+            throw Except(msg.data());
+        }
+    }
 
-	// The memory or registers are not aware of memory segmentation
-	segment		segments_{};
+    // create trace log
+    constexpr auto generate_trace(sysb bin, instruct& inst) noexcept -> void {
+        if (tracer_ != nullptr) {
+            tracer_->generate_trace<
+                sysb, instruct, memory, registers, segment
+            >(bin, inst, memory_, registers_, segments_);
+        }
+    }
 
-	// The tracer pointer is used to record CPU state information
-	Tracer*		tracer_;
+    // fetch unit
+    [[nodiscard]] constexpr auto fetch() -> sysb {
+        if (!Core::in_range<sysb>(registers_.GP(PC), segments_.at(CS))) {
+            trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+                "Error: PC exceeds CS boundary!");
+        }
+        if (auto instr = memory_.read_slot(registers_.GP(PC)); instr.has_value()) {
+            ++registers_.GP(PC);
+            return instr.value();
+        }
+        trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+            "Error: Failed to read instruction from memory!");
+        // dummy return value to silent compiler warning
+        return 0;
+    }
+
+    // execute unit
+    [[nodiscard]] constexpr auto execute(const instruct& instr) -> typename alu_out::op_size {
+        alu_out out = alu::exec<typename alu_in::op_size>(gen_ALUIn(instr));
+        update_psr(out.Flags_);
+        return out.Res_;
+    }
+
+    // memory access and write back
+    constexpr auto mem_access(const instruct& instr, sysb v) -> void {
+        switch (instr.code_) {
+        // only LDR, STR, PUSH, and POP will access memory;
+        case LDR: {
+            if (auto m = memory_.read_slot(v); m.has_value()) {
+                registers_.GP(instr.Rd_) = m.value();
+            } else {
+                trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+                    "Error: Invalid memory access!");
+            }
+            break;
+        } 
+        case STR: {
+            if (!memory_.write_slot(registers_.GP(instr.Rd_), v)) {
+                trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+                    "Error: Invalid memory access!");
+            }
+            break;
+        }
+        case PUSH: {
+            if (!Core::in_range(v, segments_.at(SS))) {
+                trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>("Error: Stackoverflow!");
+            }
+            memory_.write_slot(registers_.GP(instr.Rd_), v);
+            registers_.GP(SP) = v;
+            break;
+        } 
+        case POP: {
+            if (!Core::in_range(v - 1, segments_.at(SS))) {
+                return;
+            }
+            if (auto m = memory_.read_slot(registers_.GP(SP)); m.has_value()) {
+                registers_.GP(instr.Rd_) = m.value();
+                registers_.GP(SP) = v;
+            } else {
+                trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>("Error: Invalid memory access!");
+            }
+            break;
+        }
+        // for other instructions, "v" is the result that needs to be write back to Rd
+        default: {
+            registers_.GP(instr.Rd_) = v;
+            break;
+        }
+        }
+    }
+
+    // check jump condition before ALU
+    // if is jump instruction, then return true, else return false
+    constexpr auto check_jump(const instruct& ins) -> bool {
+        if (ins.type_ != J_t) {
+            return false;
+        }
+        // lambda function to perform jump
+        auto perform_jump = [this](bool cond, typename registers::gp_width dst)
+            noexcept -> void {
+            if (cond) {
+                registers_.GP(PC) = dst;
+            }
+        };
+        switch (ins.code_) {
+            case JMP:	perform_jump(true,				ins.imm_);		break;
+            case JZ:	perform_jump(registers_.PSR(Z), ins.imm_);		break;
+            case JN:	perform_jump(registers_.PSR(N), ins.imm_);		break;
+            case JC:	perform_jump(registers_.PSR(C), ins.imm_);		break;
+            case JV:	perform_jump(registers_.PSR(V), ins.imm_);		break;
+            case JZN:	perform_jump(registers_.PSR(Z) || 
+                                     registers_.PSR(N), ins.imm_);		break;
+            case SYSCALL: {
+                try {
+                    syscall::template syscall_table_<Core::memory, Core::registers>.at(
+                        static_cast<std::uint32_t>(ins.imm_))
+                        (this->memory_, this->registers_);
+                }
+                catch (const std::out_of_range&) {
+                    trace_log<Tracer::LogCriticalLvls::ERROR, std::out_of_range>(
+                        "Error: Unrecoganized SYSCALL number!");
+                }
+                break;
+            }
+            default:
+                trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+                    "Error: Unrecoganized instruction type detected!");
+                break;
+        }
+        return true;
+    }
+
+    // generate alu_in based on the instruction
+    constexpr auto gen_ALUIn(const instruct& ins) const -> alu_in {
+        // J-type instruction should not go through
+        if (ins.type_ == J_t) {
+            trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>("Error: Jump-type instruction fall through!");
+        }
+        // lambda function to help create ALU input for R & I type instruction
+        auto make_ALUIn_RI = [this](const instruct & ins, ALU_OpCode op) -> alu_in {
+            switch (ins.type_) {
+                case R_t:	return make_ALUIn<sysb>(op, registers_.GP(ins.Rm_), registers_.GP(ins.Rn_));
+                case I_t:	return make_ALUIn<sysb>(op, registers_.GP(ins.Rm_), ins.imm_);
+                default:	trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+                                "Error: Unrecoganized instruction type detected!");
+            }
+            // dummy return value to silent compiler warning
+            return alu_in{};
+        };
+        switch (ins.code_) {
+            // Arithmetic Ops
+            case ADD:		return make_ALUIn_RI(ins, ALU_OpCode::ADD);
+            case UMUL:		return make_ALUIn_RI(ins, ALU_OpCode::UMUL);
+            case UDIV:		return make_ALUIn_RI(ins, ALU_OpCode::UDIV);
+            case UMOL:		return make_ALUIn_RI(ins, ALU_OpCode::UMOL);
+            // Binary Logical Ops
+            case AND:		return make_ALUIn_RI(ins, ALU_OpCode::AND);
+            case ORR:		return make_ALUIn_RI(ins, ALU_OpCode::ORR);
+            case XOR:		return make_ALUIn_RI(ins, ALU_OpCode::XOR);
+            case SHL:		return make_ALUIn_RI(ins, ALU_OpCode::SHL);
+            case SHR:		return make_ALUIn_RI(ins, ALU_OpCode::SHR);
+            case RTL:		return make_ALUIn_RI(ins, ALU_OpCode::RTL);
+            case RTR:		return make_ALUIn_RI(ins, ALU_OpCode::RTR);
+            // Uniary Logical Ops
+            // for uniary operations, only the first operand is used, second is discarded (0x0)
+            case NOT:		return make_ALUIn<sysb>(ALU_OpCode::COMP, registers_.GP(ins.Rm_), 0x0);
+            // Load and Store Ops
+            case LDR:		return make_ALUIn<sysb>(ALU_OpCode::PASS, registers_.GP(ins.Rm_), 0x0);
+            case STR:		return make_ALUIn<sysb>(ALU_OpCode::PASS, registers_.GP(ins.Rm_), 0x0);
+            // Stack Ops
+            case PUSH:		return make_ALUIn<sysb>(ALU_OpCode::ADD, registers_.GP(SP), -1);
+            case POP:		return make_ALUIn<sysb>(ALU_OpCode::ADD, registers_.GP(SP),  1);
+            default:		trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+                                "Error: Unrecoganized instruction type detected!");
+        }
+        // dummy return value to silent compiler warning
+        return alu_in{};
+    }
+
+    // helper function to create ALU_in
+    template <std::convertible_to<typename alu_in::op_size> T>
+    inline static constexpr auto make_ALUIn(ALU_OpCode alu_op, T op1, T op2) noexcept
+        -> alu_in {
+        return alu_in{
+            alu_op,
+            {op1, op2}
+        };
+    }
+
+    // set psr flags
+    constexpr auto update_psr(const typename alu_out::flag_type& flags) noexcept -> void {
+        // Note: alu_out::flag_type == unordered_set<std::uint8_t>;
+        registers_.clear_psr();
+        for (auto&& F : flags) {
+            registers_.PSR(F, true);
+        }
+    }
+
+    // I-loader & D-loader helper
+    template <typename T, typename... Ts>
+    constexpr auto r_load(std::size_t idx, std::size_t lim, T x, Ts... xs) noexcept -> void {
+        if (idx > lim) {
+            return;
+        }
+        memory_.write_slot(static_cast<sysb>(x), idx);
+        if constexpr (sizeof...(Ts) > 0) {
+            r_load(idx + 1, lim, xs...);
+        }
+    }
+
+    // validate addr with segment size
+    template <std::unsigned_integral T>
+    [[nodiscard]] inline static constexpr auto in_range(T p, const std::pair<T, T>& seg) noexcept -> bool {
+        return p >= seg.first && p <= seg.second;
+    }
+
+private:
+    memory		memory_{};
+    registers	registers_{};
+
+    // The memory or registers are not aware of memory segmentation
+    segment		segments_{};
+
+    // The tracer pointer is used to record CPU state information
+    Tracer*		tracer_;
 };
