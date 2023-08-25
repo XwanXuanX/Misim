@@ -835,76 +835,59 @@ namespace scsp::ALU
 }
 
 
+namespace scsp::decode
+{
+    enum OpType : std::uint8_t
+    {
+        Rt,     //  R_type: 2 source registers, 1 dest registers, no imm; Binary operations
+                //  ADD Rd, Rs, Rm ; MUL Rd, Rs, Rm
 
+        It,     //  I_type: 1 source register, 1 dest register, 1 imm; Binary operations, with imm
+                //  ADD Rd, Rs, imm
 
+        Ut,     //  U_type: 1 source register, 1 dest register, 0 imm; Unary operations
+                //  NEG Rd, Rs ; NOT Rd, Rs ; LDR Rd, Rs ; STR Rd, Rs
 
+        St,     //  S_type: 0 source register, 1 dest register, 0 imm (only for stack operations)
+                //  PUSH Rd ; POP Rd
 
+        Jt      //  J_type: 0 source register, 0 dest register 1 imm (only for branching)
+                //  JMP imm ; JEQ imm
+    };
 
+    enum OpCode : std::uint8_t
+    {
+        // Opcode	//  Explanation			    //		Example					//		Semantics
+        ADD,		//  add two operands		//		ADD  R1, R2, R3/imm		//		R1 <- R2 + R3/imm
+        UMUL,		//  multiple two operands	//		UMUL R1, R2, R3/imm		//		R1 <- R2 * R3/imm
+        UDIV,		//  divide two operands		//		UDIV R1, R2, R3/imm		//		R1 <- R2 / R3/imm
+        UMOL,		//		op1 % op2			//		UMOL R1, R2, R3/imm		//		R1 <- R2 % R3/imm
 
+        AND,		//  bitwise And of A & B	//		AND  R1, R2, R3/imm		//		R1 <- R2 & R3/imm
+        ORR,		//  bitwise Or of A & B		//		ORR  R1, R2, R3/imm		//		R1 <- R2 | R3/imm
+        XOR,		//  bitwise Xor of A & B	//		XOR  R1, R2, R3/imm		//		R1 <- R2 ^ R3/imm
+        SHL,		//  logical shift left		//		SHL  R1, R2, R3/imm		//		R1 <- R2 << R3/imm
+        SHR,		//  logical shift right		//		SHR  R1, R2, R3/imm		//		R1 <- R2 >> R3/imm
+        RTL,		//  logical rotate left		//		RTL  R1, R2, R3/imm		//		R1 <- R2 <~ R3/imm
+        RTR,		//  logical rotate right	//		RTR  R1, R2, R3/imm		//		R1 <- R2 ~> R3/imm
 
+        NOT,		//  comp all the bits		//		NOT  R1, R2				//		R1 <- ~R2
 
+        LDR,		//  load reg from mem		//		LDR  R1, R2				//		R1 <- [R2]
+        STR,		//  store reg in mem		//		STR  R1, R2				//		[R1] <- R2
 
-   
+        PUSH,		//  push reg onto stack		//		PUSH R1					//		[SP - 4] <- R1;
+        POP,		//  pop top ele into reg	//		POP	 R1					//		R1 <- [SP] + 4
 
+        JMP,		//	unconditional jump		//		JMP label				//		N/A
+        JZ,			//  jump if Z flag is set	//		JZ	label				//		N/A
+        JN,			//  jump if N flag is set	//		JN	label				//		N/A
+        JC,			//  jump if C flag is set	//		JC	label				//		N/A
+        JV,			//  jump if V flag is set	//		JV	label				//		N/A
+        JZN,		//  jump if Z or N is set	//		JZN label				//		N/A
 
-
-
-
-
-
-// 5 types of instructions:
-enum OpType : std::uint8_t {
-    R_t,		// R_type ==> 2 source registers, 1 dest registers, no imm; Binary operations
-                //			  ADD Rd, Rs, Rm | MUL Rd, Rs, Rm
-    I_t,		// I_type ==> 1 source register, 1 dest register, 1 imm; Binary operations, with imm
-                //			  ADD Rd, Rs, imm
-    U_t,		// U_type ==> 1 source register, 1 dest register, 0 imm; Unary operations
-                //			  NEG Rd, Rs | NOT Rd, Rs | LDR Rd, Rs | STR Rd, Rs
-    S_t,		// S_type ==> 0 source register, 1 dest register, 0 imm (only for stack operations)
-                //			  PUSH Rd | POP  Rd
-    J_t			// J_type ==> 0 source register, 0 dest register 1 imm (only for branching)
-                //			  JMP imm | JEQ	imm
-};
-
-enum OpCode : std::uint8_t {
-    // Opcode	//		Explanation			//		Example					//		Semantics
-    ADD,		// add two operands			//		ADD  R1, R2, R3/imm		//		R1 <- R2 + R3/imm
-    UMUL,		// multiple two operands	//		UMUL R1, R2, R3/imm		//		R1 <- R2 * R3/imm
-    UDIV,		// divide two operands		//		UDIV R1, R2, R3/imm		//		R1 <- R2 / R3/imm
-    UMOL,		//		op1 % op2			//		UMOL R1, R2, R3/imm		//		R1 <- R2 % R3/imm
-
-    AND,		// bitwise And of A & B		//		AND  R1, R2, R3/imm		//		R1 <- R2 & R3/imm
-    ORR,		// bitwise Or of A & B		//		ORR  R1, R2, R3/imm		//		R1 <- R2 | R3/imm
-    XOR,		// bitwise Xor of A & B		//		XOR  R1, R2, R3/imm		//		R1 <- R2 ^ R3/imm
-    SHL,		// logical shift left		//		SHL  R1, R2, R3/imm		//		R1 <- R2 << R3/imm
-    SHR,		// logical shift right		//		SHR  R1, R2, R3/imm		//		R1 <- R2 >> R3/imm
-    RTL,		// logical rotate left		//		RTL  R1, R2, R3/imm		//		R1 <- R2 <~ R3/imm
-    RTR,		// logical rotate right		//		RTR  R1, R2, R3/imm		//		R1 <- R2 ~> R3/imm
-
-    NOT,		// comp all the bits		//		NOT  R1, R2				//		R1 <- ~R2
-
-    LDR,		// load reg from mem		//		LDR  R1, R2				//		R1 <- [R2]
-    STR,		// store reg in mem			//		STR  R1, R2				//		[R1] <- R2
-
-    PUSH,		// push reg onto stack		//		PUSH R1					//		[SP - 4] <- R1;
-    POP,		// pop top ele into reg		//		POP	 R1					//		R1 <- [SP] + 4
-
-    JMP,		//	unconditional jump		//		JMP label				//		N/A
-    JZ,			// jump if Z flag is set	//		JZ	label				//		N/A
-    JN,			// jump if N flag is set	//		JN	label				//		N/A
-    JC,			// jump if C flag is set	//		JC	label				//		N/A
-    JV,			// jump if V flag is set	//		JV	label				//		N/A
-    JZN,		// jump if Z or N is set	//		JZN label				//		N/A
-
-    SYSCALL		// invokes system calls		//		SYSCALL 1				//		N/A
-};
-
-// Encoding rules
-// It's the encoding designer's obligation to make sure all info can be fit in min_width
-struct default_encoding final {
-    using min_width = std::uint32_t;				// minimum instruction length
-    using idx_len_t = std::uint8_t;					// type used to encode idx and len
-    using field = std::pair<idx_len_t, idx_len_t>;	// field type
+        SYSCALL		//  invokes system calls	//		SYSCALL 1				//		N/A
+    };
 
     // Basic layout:
     // 1 0 9 8   7 6 5 4   3 2 1 0   9 8 7 6   5 4 3 2   1 0 9 8   7 6 5 4   3 2 1 0
@@ -913,170 +896,231 @@ struct default_encoding final {
     // \_____________________|_/	   |		  |				  |				|
     //			imm			 Rn		   Rm		  Rd			 OpCode		  OpType
 
-    // The encoding format is as follows: pair<start idx, nbit_len>
-    // Encoding as follows
-    static constexpr field op_type_{ 0 , 4 };
-    static constexpr field op_code_{ 4 , 8 };
-    static constexpr field		Rd_{ 12, 4 };
-    static constexpr field		Rm_{ 16, 4 };
-    static constexpr field		Rn_{ 20, 4 };	// Note: Rn and imm share the same 4 bits
-    static constexpr field	   imm_{ 20, 12};	// Allowed since Rn is optional
-};
+    struct DefaultEncoding final
+    {
+        using min_width_type = std::uint32_t;
+        using value_type     = std::uint8_t;
 
-// -------------------------------------------------------
-// ^^^ Encoding Rules			Implementations vvv
-// -------------------------------------------------------
-
-template <class E>
-concept is_valid_encoding = requires {
-    typename E::min_width;
-    typename E::idx_len_t;
-    std::convertible_to<typename E::idx_len_t, std::uint32_t>;
-    typename E::field;
-    std::same_as<typename E::field,
-        std::pair<typename E::idx_len_t, typename E::idx_len_t>>;
-}&& requires {
-    E::op_type_; E::op_code_; E::Rd_; E::Rm_; E::Rn_; E::imm_;
-};
-
-template <is_valid_encoding E>
-struct Instr {
-private:
-    using u8 = std::uint8_t;
-    using u16 = std::uint16_t;
-    using u32 = std::uint32_t;
-
-public:
-    // template metaprogramming technique here:
-    // automatically select the best-fitting uint types for each field
-    // OpType_type
-    using Tt = std::conditional_t<(E::op_type_.second <= sizeof(u8) * byte_size), u8,
-        std::conditional_t<(E::op_type_.second <= sizeof(u16) * byte_size), u16, u32>>;
-    // OpCode_type
-    using Ct = std::conditional_t<(E::op_code_.second <= sizeof(u8) * byte_size), u8,
-        std::conditional_t<(E::op_code_.second <= sizeof(u16) * byte_size), u16, u32>>;
-    // Register_type
-    static_assert(E::Rd_.second == E::Rm_.second && E::Rm_.second == E::Rn_.second);
-    using Rt = std::conditional_t<(E::Rd_.second <= sizeof(u8) * byte_size), u8,
-        std::conditional_t<(E::Rd_.second <= sizeof(u16) * byte_size), u16, u32>>;
-    // Immediate_type
-    using It = std::conditional_t<(E::imm_.second <= sizeof(u8) * byte_size), u8,
-        std::conditional_t<(E::imm_.second <= sizeof(u16) * byte_size), u16, u32>>;
-
-    Tt			type_;		// opcode type (R I U S J)
-    Ct			code_;		// opcode
-    Rt  Rd_, Rn_, Rm_;		// dest & source registers
-    It			 imm_;		// immediate value
-};
-
-// The main decoder class
-template <is_valid_encoding E = default_encoding>
-class Decoder {
-public:
-    using encoding = E;
-    using instr_type = Instr<encoding>;
-
-    template <std::unsigned_integral T>
-        requires(sizeof(T) >= sizeof(typename encoding::min_width))
-    [[nodiscard]] static constexpr auto decode(T instr) noexcept -> instr_type {
-        using Rt = typename instr_type::Rt;
-        return instr_type{
-            .type_ = Decoder::extract<T, typename instr_type::Tt>(instr, encoding::op_type_),
-            .code_ = Decoder::extract<T, typename instr_type::Ct>(instr, encoding::op_code_),
-            .Rd_ = Decoder::extract<T, Rt>(instr, encoding::Rd_),
-            .Rn_ = Decoder::extract<T, Rt>(instr, encoding::Rn_),
-            .Rm_ = Decoder::extract<T, Rt>(instr, encoding::Rm_),
-            .imm_ = Decoder::extract<T, typename instr_type::It>(instr, encoding::imm_)
+        template <std::unsigned_integral T>
+        struct Field
+        {
+            T m_start_idx;
+            T m_length;
         };
-    }
 
-private:
-    template <std::unsigned_integral T>
-    [[nodiscard]] static constexpr auto make_mask(std::size_t s) noexcept -> T {
-        // first turn all the field on; then shift right to obtain the mask
-        // this strategy will eliminates out of range operation
-        T m = bit_set<T>(static_cast<T>(0x0)).value();
-        if (s > sizeof(T) * byte_size) {
-            return m;
+        using field_type = Field<value_type>;
+
+        static constexpr field_type m_op_type { .m_start_idx = 0,  .m_length = 4  };
+        static constexpr field_type m_op_code { .m_start_idx = 4,  .m_length = 8  };
+        static constexpr field_type m_Rd      { .m_start_idx = 12, .m_length = 4  };
+        static constexpr field_type m_Rm      { .m_start_idx = 16, .m_length = 4  };
+        static constexpr field_type m_Rn      { .m_start_idx = 20, .m_length = 4  };
+        static constexpr field_type m_imm     { .m_start_idx = 20, .m_length = 12 };
+    };
+
+    template <typename EncodingRule>
+    concept valid_encoding_rule = requires
+    {
+        typename EncodingRule::min_width_type;
+        typename EncodingRule::value_type;
+        typename EncodingRule::field_type;
+
+        requires
+        std::convertible_to<typename EncodingRule::value_type, std::uint32_t>;
+
+        EncodingRule::m_op_type;
+        EncodingRule::m_op_code;
+        EncodingRule::m_Rd;
+        EncodingRule::m_Rm;
+        EncodingRule::m_Rn;
+        EncodingRule::m_imm;
+    };
+
+    template <valid_encoding_rule EncodingRule>
+    struct Instruction
+    {
+    private:
+        using u8  = std::uint8_t;
+        using u16 = std::uint16_t;
+        using u32 = std::uint32_t;
+
+        template <typename EncodingRule::value_type Size>
+        using field_size_type = std::conditional_t<(Size <= sizeof(u8) * CHAR_BIT), u8,
+                                std::conditional_t<(Size <= sizeof(u16) * CHAR_BIT), u16, u32>>;
+
+        static_assert(
+            EncodingRule::m_Rd.m_length == EncodingRule::m_Rm.m_length &&
+            EncodingRule::m_Rm.m_length == EncodingRule::m_Rn.m_length
+        );
+
+    public:
+        using optype_type    = field_size_type<EncodingRule::m_op_type.m_length>;
+        using opcode_type    = field_size_type<EncodingRule::m_op_code.m_length>;
+        using register_type  = field_size_type<EncodingRule::m_Rd.m_length>;
+        using immediate_type = field_size_type<EncodingRule::m_imm.m_length>;
+
+        optype_type    m_type;
+        opcode_type    m_code;
+        register_type  m_Rd, m_Rn, m_Rm;
+        immediate_type m_imm;
+    };
+
+    template <valid_encoding_rule EncodingRule>
+    class Decoder
+    {
+    public:
+        using encoding_type    = EncodingRule;
+        using field_type       = typename encoding_type::field_type;
+        using instruction_type = Instruction<encoding_type>;
+
+        template <std::unsigned_integral T> [[nodiscard]] static constexpr
+        auto decode(T instruction) noexcept
+            -> instruction_type
+        {
+            static_assert(sizeof(T) >= sizeof(typename encoding_type::min_width_type),
+                          "Instruction length smaller than minimum encoding length.");
+
+            return instruction_type{
+                .m_type = extract<T, typename instruction_type::optype_type>   (instruction, encoding_type::m_op_type),
+                .m_code = extract<T, typename instruction_type::opcode_type>   (instruction, encoding_type::m_op_code),
+
+                .m_Rd   = extract<T, typename instruction_type::register_type> (instruction, encoding_type::m_Rd     ),
+                .m_Rn   = extract<T, typename instruction_type::register_type> (instruction, encoding_type::m_Rn     ),
+                .m_Rm   = extract<T, typename instruction_type::register_type> (instruction, encoding_type::m_Rm     ),
+
+                .m_imm  = extract<T, typename instruction_type::immediate_type>(instruction, encoding_type::m_imm    )
+            };
         }
-        return m >> (sizeof(T) * byte_size - s);
-    }
 
-    template <std::unsigned_integral T, std::unsigned_integral Conv>
-    [[nodiscard]] static constexpr auto extract(T instr, typename encoding::field fld) noexcept -> Conv {
-        instr >>= fld.first;
-        return static_cast<Conv>(instr & Decoder::make_mask<T>(fld.second));
-    }
-};
+    private:
+        template <std::unsigned_integral T> [[nodiscard]] static constexpr
+        auto makeMask(const std::size_t mask_length) noexcept
+            -> T
+        {
+            using ::scsp::freefuncs::setBit;
+            T mask = 0x0;
+            setBit<T>(mask);
 
-
-// -------------------------------------------------------
-// 
-// Tracer
-// 
-// -------------------------------------------------------
-
-
-struct Labels {
-    using gp_trans_t = const std::map<GPReg, std::string_view>;
-    using psr_trans_t = const std::unordered_map<PSRReg, char>;
-    using type_trans_t = const std::unordered_map<OpType, std::string_view>;
-    using code_trans_t = const std::unordered_map<OpCode, std::string_view>;
-    using seg_trans_t = const std::unordered_map<SEGReg, std::string_view>;
-
-    gp_trans_t gp_trans_ = {
-        {R0, "R0"}, {R1, "R1"}, {R2, "R2"}, {R3, "R3"}, {R4, "R4"}, {R5, "R5"}, {R6, "R6"},
-        {R7, "R7"}, {R8, "R8"}, {R9, "R9"}, {R10, "R10"}, {R11, "R11"}, {R12, "R12"},
-        {SP, "SP"}, {LR, "LR"}, {PC, "PC"}
-    };
-    psr_trans_t psr_trans_ = {
-        {N, 'N'}, {Z, 'Z'}, {C, 'C'}, {V, 'V'}
-    };
-    type_trans_t type_trans_ = {
-        {R_t, "R_t"}, {I_t, "I_t"}, {U_t, "U_t"}, {S_t, "S_t"}, {J_t, "J_t"}
-    };
-    code_trans_t code_trans_ = {
-        {ADD, "ADD"}, {UMUL, "UMUL"}, {UDIV, "UDIV"}, {UMOL, "UMOL"},
-        {AND, "AND"}, {ORR, "ORR"}, {XOR, "XOR"}, {SHL, "SHL"}, {SHR, "SHR"}, 
-        {RTL, "RTL"}, {RTR, "RTR"}, {NOT, "NOT"},
-        {LDR, "LDR"}, {STR, "STR"}, {PUSH, "PUSH"}, {POP, "POP"},
-        {JMP, "JMP"}, {JZ, "JZ"}, {JN, "JN"}, {JC, "JC"}, {JV, "JV"}, {JZN, "JZN"}, {SYSCALL, "SYSCALL"}
-    };
-    seg_trans_t seg_trans_ = {
-        {CS, "Code Segment"}, {DS, "Data Segment"}, {SS, "Stack Segment"}, {ES, "Extra Segment"}
-    };
-};
-
-// Tracer class is responsible for recording the state of the CPU after each instruction is executed.
-class Tracer {
-public:
-    // Tracer must be created with a valid file path
-    [[nodiscard]] explicit Tracer(const std::filesystem::path& path) :
-        trace_file_(std::filesystem::absolute(path).c_str()), 
-        inst_count{0}, labels_{} {
-        if (!trace_file_.is_open()) {
-            throw std::filesystem::filesystem_error("Error: Failed to create / open the tracer file!",
-                std::error_code(1, std::system_category()));
+            if (mask_length > sizeof(T) * CHAR_BIT) {
+                return mask;
+            }
+            return mask >> (sizeof(T) * CHAR_BIT - mask_length);
         }
-    }
 
-    enum struct LogCriticalLvls : std::int8_t {
-        INFO,
-        WARNING,
-        ERROR
+        template <std::unsigned_integral T        ,
+                  std::unsigned_integral Conversion> [[nodiscard]] static constexpr
+        auto extract(T instruction, field_type field) noexcept
+            -> Conversion
+        {
+            instruction >>= field.m_start_idx;
+            return static_cast<Conversion>(instruction & makeMask<T>(field.m_length));
+        }
     };
+}
+
+
+namespace scsp::tracer
+{
+    class Tracer
+    {
+    public:
+        enum struct CriticalLvls : std::int8_t
+        {
+            INFO,
+            WARNING,
+            ERROR
+        };
+
+        struct Labels
+        {
+            using enum ::scsp::register_file::GPReg;
+            using enum ::scsp::register_file::PSRReg;
+            using enum ::scsp::decode::OpType;
+            using enum ::scsp::decode::OpCode;
+            using enum ::scsp::register_file::SEGReg;
+
+            using 
+
+        };
+
+    public:
+        [[nodiscard]] explicit
+        Tracer(const std::filesystem::path& log_path)
+            : m_log_file{ std::filesystem::absolute(log_path).c_str() }
+            , m_instruction_count{ 0 }
+        {
+            if (!m_log_file.is_open())
+            {
+                throw std::filesystem::filesystem_error(
+                    "Failed to create the log file.",
+                    std::error_code(1, std::system_category())
+                );
+            }
+        }
+
+    private:
+        std::ofstream m_log_file;
+        std::uint32_t m_instruction_count;
+    };
+}
+
+
+
+//struct Labels {
+//    using gp_trans_t = const std::map<GPReg, std::string_view>;
+//    using psr_trans_t = const std::unordered_map<PSRReg, char>;
+//    using type_trans_t = const std::unordered_map<OpType, std::string_view>;
+//    using code_trans_t = const std::unordered_map<OpCode, std::string_view>;
+//    using seg_trans_t = const std::unordered_map<SEGReg, std::string_view>;
+//
+//    gp_trans_t gp_trans_ = {
+//        {R0, "R0"}, {R1, "R1"}, {R2, "R2"}, {R3, "R3"}, {R4, "R4"}, {R5, "R5"}, {R6, "R6"},
+//        {R7, "R7"}, {R8, "R8"}, {R9, "R9"}, {R10, "R10"}, {R11, "R11"}, {R12, "R12"},
+//        {SP, "SP"}, {LR, "LR"}, {PC, "PC"}
+//    };
+//    psr_trans_t psr_trans_ = {
+//        {N, 'N'}, {Z, 'Z'}, {C, 'C'}, {V, 'V'}
+//    };
+//    type_trans_t type_trans_ = {
+//        {R_t, "R_t"}, {I_t, "I_t"}, {U_t, "U_t"}, {S_t, "S_t"}, {J_t, "J_t"}
+//    };
+//    code_trans_t code_trans_ = {
+//        {ADD, "ADD"}, {UMUL, "UMUL"}, {UDIV, "UDIV"}, {UMOL, "UMOL"},
+//        {AND, "AND"}, {ORR, "ORR"}, {XOR, "XOR"}, {SHL, "SHL"}, {SHR, "SHR"}, 
+//        {RTL, "RTL"}, {RTR, "RTR"}, {NOT, "NOT"},
+//        {LDR, "LDR"}, {STR, "STR"}, {PUSH, "PUSH"}, {POP, "POP"},
+//        {JMP, "JMP"}, {JZ, "JZ"}, {JN, "JN"}, {JC, "JC"}, {JV, "JV"}, {JZN, "JZN"}, {SYSCALL, "SYSCALL"}
+//    };
+//    seg_trans_t seg_trans_ = {
+//        {CS, "Code Segment"}, {DS, "Data Segment"}, {SS, "Stack Segment"}, {ES, "Extra Segment"}
+//    };
+//};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     // The main error logging method
     template <Tracer::LogCriticalLvls lvl, std::derived_from<std::exception> Except>
     auto log(const std::string_view& msg) -> void {
         auto get_msg_prefix = [](Tracer::LogCriticalLvls lvl) -> std::string_view {
             switch (lvl) {
-                case Tracer::LogCriticalLvls::INFO:		return "INFO: ";
-                case Tracer::LogCriticalLvls::WARNING:	return "WARNING: ";
-                case Tracer::LogCriticalLvls::ERROR:	return "ERROR: ";
-                default: throw std::runtime_error("Error: Unrecoganized log critical level!");
+            case Tracer::LogCriticalLvls::INFO:		return "INFO: ";
+            case Tracer::LogCriticalLvls::WARNING:	return "WARNING: ";
+            case Tracer::LogCriticalLvls::ERROR:	return "ERROR: ";
+            default: throw std::runtime_error("Error: Unrecoganized log critical level!");
             }
-        };
+            };
         trace_file_ << get_msg_prefix(lvl) << msg << '\n';
         if (lvl == Tracer::LogCriticalLvls::ERROR) {
             trace_file_.close();
@@ -1141,8 +1185,8 @@ private:
     template <class Ins>
     auto get_instr(const std::add_lvalue_reference_t<Ins> inst) -> std::string {
         std::stringstream ss_label{}, ss_value{};
-        const std::array<std::string_view, 6> l{"OpType", "OpCode", "Rd", "Rm", "Rn", "Imm"};
-        const std::array<typename Ins::Rt, 3> regs{inst.Rd_, inst.Rm_, inst.Rn_};
+        const std::array<std::string_view, 6> l{ "OpType", "OpCode", "Rd", "Rm", "Rn", "Imm" };
+        const std::array<typename Ins::Rt, 3> regs{ inst.Rd_, inst.Rm_, inst.Rn_ };
         std::ranges::for_each(l, [&ss_label](const auto v)->void {ss_label << v << ','; });
         ss_label << '\n';
         try {
@@ -1171,15 +1215,18 @@ private:
         return ss.str();
     }
 
-private:
-    std::ofstream	trace_file_;
-
-    // instruction counter: count the number of instructions executed
-    std::uint32_t	inst_count;
-
-    // the label class which maps integers to label as strings
-    const Labels	labels_{};
 };
+
+
+
+
+
+
+
+
+
+
+
 
 
 // -------------------------------------------------------
