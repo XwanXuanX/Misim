@@ -53,8 +53,8 @@
 3. Rules for functions also apply for class methods;
 4. Variables should be named with snake-case;
 5. Class member variables should be named with snake-case, with prefix `m_`;
-6. Typename for templates should be named with upper-camel-case; Concept names should be named with snake-case;
-7. Type alias should be named with snake-case, with surfix `_type`;
+6. Type-name for templates should be named with upper-camel-case; Concept names should be named with snake-case;
+7. Type alias should be named with snake-case, with suffix `_type`;
 8. Namespace should be named with snake-case;
 9. Macro names should be named with all-upper-case;
 
