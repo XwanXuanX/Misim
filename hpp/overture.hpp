@@ -1019,319 +1019,116 @@ namespace scsp::decode
 }
 
 
-namespace scsp::tracer
+namespace scsp::syscall
 {
-    class Tracer
+    template <typename Object>
+    using lref_type = std::add_lvalue_reference_t<Object>;
+
+    struct SyscallTable
     {
-    public:
-        enum struct CriticalLvls : std::int8_t
-        {
-            INFO,
-            WARNING,
-            ERROR
+        template <typename Memory, typename Register>
+        inline static const std::unordered_map<std::uint32_t,
+                                               std::function<void(lref_type<Memory>, lref_type<Register>)>>
+        m_syscall_table = {
+            {0, SyscallTable::template welcome   <Memory, Register>},
+            {1, SyscallTable::template consoleOut<Memory, Register>},
+            {2, SyscallTable::template consoleIn <Memory, Register>}
         };
-
-        struct Labels
-        {
-            using enum ::scsp::register_file::GPReg;
-            using enum ::scsp::register_file::PSRReg;
-            using enum ::scsp::decode::OpType;
-            using enum ::scsp::decode::OpCode;
-            using enum ::scsp::register_file::SEGReg;
-
-            using 
-
-        };
-
-    public:
-        [[nodiscard]] explicit
-        Tracer(const std::filesystem::path& log_path)
-            : m_log_file{ std::filesystem::absolute(log_path).c_str() }
-            , m_instruction_count{ 0 }
-        {
-            if (!m_log_file.is_open())
-            {
-                throw std::filesystem::filesystem_error(
-                    "Failed to create the log file.",
-                    std::error_code(1, std::system_category())
-                );
-            }
-        }
 
     private:
-        std::ofstream m_log_file;
-        std::uint32_t m_instruction_count;
+        template <typename Memory, typename Register> static constexpr
+        auto welcome(lref_type<Memory>, lref_type<Register>) noexcept
+            -> void
+        {
+            printf(
+                "Welcome stranger!\n\n"
+                "This is the CPU speaking - I'm glad that you found this eastern egg left by my creator.\n"
+                "If you see this message, it means that you must be browsing through the code or experimenting with me.\n"
+                "I hope you have the same enthusiasm with C++ as my creator does - because enthusiasm is the "
+                "most important thing in the world.\n\n"
+                "Well, wish you a good day. Bye, adios!\n"
+            );
+        }
+
+        /*
+         * Doc-string:
+         * The console_out() function allow user to print text on terminal.
+         * @inputs:
+         *	- R0: the starting addr of a contigious memory (string) that will be displayed;
+         *	- R1: the length of contigious memory;
+         * @outputs:
+         *	- None
+         */
+        template <typename Memory, typename Register> static
+        auto consoleOut(lref_type<Memory> memory, lref_type<Register> registers)
+            -> void
+        {
+            using enum ::scsp::register_file::GPReg;
+
+            std::string temp{};
+            temp.reserve(registers.getGeneralPurpose(R1));
+
+            for (auto i = registers.getGeneralPurpose(R0);
+                 i < (registers.getGeneralPurpose(R0) + registers.getGeneralPurpose(R1));
+                 ++i
+                )
+            {
+                if (
+                    auto result = memory.read(i);
+                    result
+                ) {
+                    temp.push_back(*result);
+                }
+                else {
+                    throw std::out_of_range("Memory access out of range.");
+                }
+            }
+
+            std::cout << temp;
+        }
+
+        /*
+         * Doc-string:
+         * The console_in() function allow user to input string with keyboard.
+         * @inputs:
+         *	- R0: the starting addr of a contigious memory that will be filled;
+         *	- R1: the length of contigious memory;
+         * @outputs:
+         *	- User input string will be placed in the contigious memory. All spaces will be rewritten.
+         *	  Thus please make sure to save necessary contents on the stack before doing the operation.
+         */
+        template <typename Memory, typename Register> static
+        auto consoleIn(lref_type<Memory> memory, lref_type<Register> registers)
+            -> void
+        {
+            using enum ::scsp::register_file::GPReg;
+
+            std::string temp;
+            std::getline(std::cin, temp);
+            if (temp.length() > registers.getGeneralPurpose(R1))
+            {
+                throw std::length_error("User-input string exceeds maximum space length.");
+            }
+
+            std::ranges::for_each(
+                temp,
+                [i = registers.getGeneralPurpose(R0), &memory](auto character) mutable noexcept
+                    -> void
+                {
+                    memory.write(character, i);
+                    ++i;
+                }
+            );
+        }
     };
 }
 
 
 
-//struct Labels {
-//    using gp_trans_t = const std::map<GPReg, std::string_view>;
-//    using psr_trans_t = const std::unordered_map<PSRReg, char>;
-//    using type_trans_t = const std::unordered_map<OpType, std::string_view>;
-//    using code_trans_t = const std::unordered_map<OpCode, std::string_view>;
-//    using seg_trans_t = const std::unordered_map<SEGReg, std::string_view>;
-//
-//    gp_trans_t gp_trans_ = {
-//        {R0, "R0"}, {R1, "R1"}, {R2, "R2"}, {R3, "R3"}, {R4, "R4"}, {R5, "R5"}, {R6, "R6"},
-//        {R7, "R7"}, {R8, "R8"}, {R9, "R9"}, {R10, "R10"}, {R11, "R11"}, {R12, "R12"},
-//        {SP, "SP"}, {LR, "LR"}, {PC, "PC"}
-//    };
-//    psr_trans_t psr_trans_ = {
-//        {N, 'N'}, {Z, 'Z'}, {C, 'C'}, {V, 'V'}
-//    };
-//    type_trans_t type_trans_ = {
-//        {R_t, "R_t"}, {I_t, "I_t"}, {U_t, "U_t"}, {S_t, "S_t"}, {J_t, "J_t"}
-//    };
-//    code_trans_t code_trans_ = {
-//        {ADD, "ADD"}, {UMUL, "UMUL"}, {UDIV, "UDIV"}, {UMOL, "UMOL"},
-//        {AND, "AND"}, {ORR, "ORR"}, {XOR, "XOR"}, {SHL, "SHL"}, {SHR, "SHR"}, 
-//        {RTL, "RTL"}, {RTR, "RTR"}, {NOT, "NOT"},
-//        {LDR, "LDR"}, {STR, "STR"}, {PUSH, "PUSH"}, {POP, "POP"},
-//        {JMP, "JMP"}, {JZ, "JZ"}, {JN, "JN"}, {JC, "JC"}, {JV, "JV"}, {JZN, "JZN"}, {SYSCALL, "SYSCALL"}
-//    };
-//    seg_trans_t seg_trans_ = {
-//        {CS, "Code Segment"}, {DS, "Data Segment"}, {SS, "Stack Segment"}, {ES, "Extra Segment"}
-//    };
-//};
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-    // The main error logging method
-    template <Tracer::LogCriticalLvls lvl, std::derived_from<std::exception> Except>
-    auto log(const std::string_view& msg) -> void {
-        auto get_msg_prefix = [](Tracer::LogCriticalLvls lvl) -> std::string_view {
-            switch (lvl) {
-            case Tracer::LogCriticalLvls::INFO:		return "INFO: ";
-            case Tracer::LogCriticalLvls::WARNING:	return "WARNING: ";
-            case Tracer::LogCriticalLvls::ERROR:	return "ERROR: ";
-            default: throw std::runtime_error("Error: Unrecoganized log critical level!");
-            }
-            };
-        trace_file_ << get_msg_prefix(lvl) << msg << '\n';
-        if (lvl == Tracer::LogCriticalLvls::ERROR) {
-            trace_file_.close();
-            throw Except(msg.data());
-        }
-    }
-
-    // The main trace logging method
-    template <std::unsigned_integral T, class Ins, class Mem, class Reg, class Seg>
-    auto generate_trace(T binary, const std::add_lvalue_reference_t<Ins> instr,
-        const std::add_lvalue_reference_t<Mem> memory, const std::add_lvalue_reference_t<Reg> registers,
-        const std::add_lvalue_reference_t<Seg> segments) noexcept -> void {
-        // record instruction number
-        trace_file_ << get_heading(binary);
-        trace_file_ << get_instr<Ins>(instr);
-        trace_file_ << get_reg<Reg>(registers);
-        trace_file_ << get_mem<Mem, Seg>(memory, segments);
-        trace_file_ << '\n';
-        ++inst_count;
-    }
-
-private:
-    template <class Mem, class Seg>
-    auto get_mem(const std::add_lvalue_reference_t<Mem> mem, const std::add_lvalue_reference_t<Seg> seg)
-        -> std::string {
-        std::stringstream ss_seg{}, ss_value{};
-        for (const auto& p : seg) {
-            try {
-                ss_seg << labels_.seg_trans_.at(static_cast<SEGReg>(p.first));
-            }
-            catch (const std::out_of_range&) {
-                Tracer::log<Tracer::LogCriticalLvls::ERROR, std::out_of_range>(
-                    "Error: Tracer::seg_trans_ - No corresponding translation!");
-            }
-            for (auto i{ p.second.first }; i <= p.second.second; ++i) {
-                ss_value << static_cast<std::uint32_t>(mem.read_slot(i).value()) << ',';
-            }
-            formatter(ss_seg, ss_value);
-        }
-        return ss_seg.str();
-    }
-
-    template <class Reg>
-    auto get_reg(const std::add_lvalue_reference_t<Reg> regs) const noexcept -> std::string {
-        std::stringstream ss_label{}, ss_value{};
-        std::ranges::for_each(labels_.gp_trans_, [&](const auto p)->void {
-            ss_label << p.second << ','; ss_value << regs.GP(p.first) << ','; });
-        formatter(ss_label, ss_value);
-        std::ranges::for_each(labels_.psr_trans_, [&](const auto p)->void {
-            ss_label << p.second << ','; ss_value << regs.PSR(p.first) << ','; });
-        formatter(ss_label, ss_value);
-        return ss_label.str();
-    }
-
-    static auto formatter(std::stringstream& l, std::stringstream& v) noexcept -> void {
-        l << '\n';
-        v << '\n';
-        l << v.str();
-        v.str(std::string{});
-    }
-
-    template <class Ins>
-    auto get_instr(const std::add_lvalue_reference_t<Ins> inst) -> std::string {
-        std::stringstream ss_label{}, ss_value{};
-        const std::array<std::string_view, 6> l{ "OpType", "OpCode", "Rd", "Rm", "Rn", "Imm" };
-        const std::array<typename Ins::Rt, 3> regs{ inst.Rd_, inst.Rm_, inst.Rn_ };
-        std::ranges::for_each(l, [&ss_label](const auto v)->void {ss_label << v << ','; });
-        ss_label << '\n';
-        try {
-            ss_value << labels_.type_trans_.at(static_cast<OpType>(inst.type_)) << ',';
-            ss_value << labels_.code_trans_.at(static_cast<OpCode>(inst.code_)) << ',';
-            std::ranges::for_each(regs, [this, &ss_value](const auto v)->void {
-                ss_value << labels_.gp_trans_.at(static_cast<GPReg>(v)) << ','; });
-        }
-        catch (const std::out_of_range&) {
-            Tracer::log<Tracer::LogCriticalLvls::ERROR, std::out_of_range>(
-                "Error: Tracer::type_trans_ / Tracer::code_trans_ / Tracer::gp_trans_ "
-                "- No corresponding translation!"
-            );
-        }
-        // immediate value
-        ss_value << static_cast<std::uint32_t>(inst.imm_) << '\n';
-        ss_label << ss_value.str();
-        return ss_label.str();
-    }
-
-    template <std::unsigned_integral T>
-    static auto get_heading(T binary) noexcept -> std::string {
-        std::stringstream ss;
-        ss << "Instruction #, 0x" << std::setfill('0') << std::setw(sizeof(T) * 2)
-            << std::hex << binary << '\n';
-        return ss.str();
-    }
-
-};
-
-
-
-
-
-
-
-
-
-
-
-
-
-// -------------------------------------------------------
-// 
-// Syscall table
-// 
-// Syscall instruction provides CPU the ability to invoke kernal-level functions,
-// such as printing to terminal or getting user's keyboard inputs.
-// 
-// -------------------------------------------------------
-
-
-struct SyscallTable {
-    template <class Mem, class Reg>
-    inline static const std::unordered_map<std::uint32_t,
-        std::function<void(std::add_lvalue_reference_t<Mem>, std::add_lvalue_reference_t<Reg>)>
-    > syscall_table_ {
-        {0, SyscallTable::template welcome<Mem, Reg>},
-        {1, SyscallTable::template console_out<Mem, Reg>},
-        {2, SyscallTable::template console_in<Mem, Reg>}
-    };
-
-private:
-    template <class Mem, class Reg>
-    static constexpr auto welcome(std::add_lvalue_reference_t<Mem>, std::add_lvalue_reference_t<Reg>) noexcept -> void {
-        printf(
-            "Welcome stranger!\n\n"
-            "This is the CPU speaking - I'm glad that you found this eastern egg left by my creator.\n"
-            "If you see this message, it means that you must be browsing through the code or experimenting with me.\n"
-            "I hope you have the same enthusiasm with C++ as my creator does - because enthusiasm is the "
-            "most important thing in the world.\n\n"
-            "Well, wish you a good day. Bye, adios!\n"
-        );
-    }
-
-    /*
-    * Doc-string:
-    * The console_out() function allow user to print text on terminal.
-    * @inputs:
-    *	- R0: the starting addr of a contigious memory (string) that will be displayed;
-    *	- R1: the length of contigious memory;
-    * @outputs:
-    *	- None
-    */
-    template <class Mem, class Reg>
-    static auto console_out(std::add_lvalue_reference_t<Mem> mem, std::add_lvalue_reference_t<Reg> reg) -> void {
-        std::string tmp;
-        tmp.reserve(reg.GP(R1));
-        for (auto i{ reg.GP(R0) }; i < (reg.GP(R0) + reg.GP(R1)); ++i) {
-            if (auto op = mem.read_slot(i); op.has_value()) {
-                tmp.push_back(op.value());
-            } else {
-                throw std::out_of_range("Error: Memory access out of range!");
-            }
-        }
-        // print out the content of tmp
-        std::cout << tmp;
-    }
-
-    /*
-    * Doc-string:
-    * The console_in() function allow user to input string with keyboard.
-    * @inputs:
-    *	- R0: the starting addr of a contigious memory that will be filled;
-    *	- R1: the length of contigious memory;
-    * @outputs:
-    *	- User input string will be placed in the contigious memory. All spaces will be rewritten.
-    *	  Thus please make sure to save necessary contents on the stack before doing the operation.
-    */
-    template <class Mem, class Reg>
-    static auto console_in(std::add_lvalue_reference_t<Mem> mem, std::add_lvalue_reference_t<Reg> reg) -> void {
-        std::string tmp;
-        std::getline(std::cin, tmp);
-        if (tmp.length() > reg.GP(R1)) {
-            throw std::length_error("Error: User-input string exceeds maximum space length!");
-        }
-        // place the string sequentially into memory
-        std::ranges::for_each(tmp,
-            [idx = reg.GP(R0), &mem](auto ch) mutable noexcept -> void {
-                mem.write_slot(ch, idx);
-                ++idx;
-            }
-        );
-    }
-};
-
-
-// -------------------------------------------------------
-// 
-// CPU Core
-// 
-// -------------------------------------------------------
-
-
-/*
-* In this abstract machine, Core is consists of: memory + registerfile + ALU + decoder + fetch
-* 1. Config & Init: Configure memory size, define segment registers, initialize GP registerfile;
-* 2. Load Data & Ins: Load static-init data and instructions in corresponding segments;
-* ->	3. Fetch Ins: fetch the instruction from .code seg, inc PC by 1;
-* |		4. Decode Ins: decode binary instruction, output Instr-struct;
-* |		5. Execute: generate ALU_in -> feed ALU -> get ALU_out -> update PSR flags;
-* |		6. Mem Access: access memory if needed;
-* |		7. Write Back: write the result back to register file.
-* `<-	8. Retire the instruction.
-*/
 
 template <typename Sy, typename T, typename... Ts>
 concept is_valid_data = std::convertible_to<T, Sy> && (std::same_as<T, Ts> || ...);
@@ -1343,15 +1140,15 @@ public:
     const std::size_t mem_size = S;		// memory size
 
     // components
-    using memory	= memory<sysb, S>;
+    using memory = memory<sysb, S>;
     using registers = Registers<sysb>;
-    using decoder	= Decoder<default_encoding>;
-    using alu		= ALU;
+    using decoder = Decoder<default_encoding>;
+    using alu = ALU;
 
     // sub-components
-    using instruct  = typename decoder::instr_type;
-    using alu_in	= ALU_in<sysb>;
-    using alu_out	= ALU_out<sysb>;
+    using instruct = typename decoder::instr_type;
+    using alu_in = ALU_in<sysb>;
+    using alu_out = ALU_out<sysb>;
 
     // helper definition
     using segment = std::unordered_map<SEGReg, std::pair<sysb, sysb>>;
@@ -1390,11 +1187,11 @@ public:
     constexpr auto init(SG&& seg_config) noexcept -> bool {
         // check if the config contains all needed field
         constexpr std::array<SEGReg, 4> seg_regs{ CS, DS, SS, ES };
-        if (!std::ranges::all_of(seg_regs, [&seg_config](SEGReg sr) -> bool {return seg_config.contains(sr);})) {
+        if (!std::ranges::all_of(seg_regs, [&seg_config](SEGReg sr) -> bool {return seg_config.contains(sr); })) {
             return false;
         }
         // segment overlap is not allowed!
-        auto overlap = []<typename T>(const std::pair<T, T>& r1, decltype(r1) r2) -> bool {
+        auto overlap = []<typename T>(const std::pair<T, T>&r1, decltype(r1) r2) -> bool {
             return r1.first <= r2.second && r2.first <= r1.second;
         };
         using value_type = typename segment::mapped_type;
@@ -1405,7 +1202,7 @@ public:
         }
         // check if the start and end addr for each segment is in the range
         if (!std::ranges::all_of(rngs, [this](const value_type& p) -> bool {
-            return p.second >= p.first && (p.second >= 0 && p.second < Core::mem_size);})
+            return p.second >= p.first && (p.second >= 0 && p.second < Core::mem_size); })
             ) {
             return false;
         }
@@ -1418,7 +1215,7 @@ public:
         }
         // total segments size should be <= mem_size
         if (sysb res = std::accumulate(rngs.begin(), rngs.end(), 0,
-            [](sysb&& i, const value_type& p) {return i + (p.second - p.first) + 1;});
+            [](sysb&& i, const value_type& p) {return i + (p.second - p.first) + 1; });
             res > mem_size) {
             return false;
         }
@@ -1433,7 +1230,7 @@ public:
     // This ctor overload is used when no tracer is provided
     template <typename SG> requires std::same_as<segment, std::remove_reference_t<SG>>
     [[nodiscard]] constexpr explicit Core(SG&& seg_config)
-        : tracer_{nullptr} {
+        : tracer_{ nullptr } {
         if (!this->init(std::forward<SG>(seg_config))) {
             trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
                 "Error: Failed to initialize segments!");
@@ -1531,16 +1328,17 @@ private:
     // memory access and write back
     constexpr auto mem_access(const instruct& instr, sysb v) -> void {
         switch (instr.code_) {
-        // only LDR, STR, PUSH, and POP will access memory;
+            // only LDR, STR, PUSH, and POP will access memory;
         case LDR: {
             if (auto m = memory_.read_slot(v); m.has_value()) {
                 registers_.GP(instr.Rd_) = m.value();
-            } else {
+            }
+            else {
                 trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
                     "Error: Invalid memory access!");
             }
             break;
-        } 
+        }
         case STR: {
             if (!memory_.write_slot(registers_.GP(instr.Rd_), v)) {
                 trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
@@ -1555,7 +1353,7 @@ private:
             memory_.write_slot(registers_.GP(instr.Rd_), v);
             registers_.GP(SP) = v;
             break;
-        } 
+        }
         case POP: {
             if (!Core::in_range(v - 1, segments_.at(SS))) {
                 return;
@@ -1563,12 +1361,13 @@ private:
             if (auto m = memory_.read_slot(registers_.GP(SP)); m.has_value()) {
                 registers_.GP(instr.Rd_) = m.value();
                 registers_.GP(SP) = v;
-            } else {
+            }
+            else {
                 trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>("Error: Invalid memory access!");
             }
             break;
         }
-        // for other instructions, "v" is the result that needs to be write back to Rd
+                // for other instructions, "v" is the result that needs to be write back to Rd
         default: {
             registers_.GP(instr.Rd_) = v;
             break;
@@ -1588,31 +1387,31 @@ private:
             if (cond) {
                 registers_.GP(PC) = dst;
             }
-        };
+            };
         switch (ins.code_) {
-            case JMP:	perform_jump(true,				ins.imm_);		break;
-            case JZ:	perform_jump(registers_.PSR(Z), ins.imm_);		break;
-            case JN:	perform_jump(registers_.PSR(N), ins.imm_);		break;
-            case JC:	perform_jump(registers_.PSR(C), ins.imm_);		break;
-            case JV:	perform_jump(registers_.PSR(V), ins.imm_);		break;
-            case JZN:	perform_jump(registers_.PSR(Z) || 
-                                     registers_.PSR(N), ins.imm_);		break;
-            case SYSCALL: {
-                try {
-                    syscall::template syscall_table_<Core::memory, Core::registers>.at(
-                        static_cast<std::uint32_t>(ins.imm_))
-                        (this->memory_, this->registers_);
-                }
-                catch (const std::out_of_range&) {
-                    trace_log<Tracer::LogCriticalLvls::ERROR, std::out_of_range>(
-                        "Error: Unrecoganized SYSCALL number!");
-                }
-                break;
+        case JMP:	perform_jump(true, ins.imm_);		break;
+        case JZ:	perform_jump(registers_.PSR(Z), ins.imm_);		break;
+        case JN:	perform_jump(registers_.PSR(N), ins.imm_);		break;
+        case JC:	perform_jump(registers_.PSR(C), ins.imm_);		break;
+        case JV:	perform_jump(registers_.PSR(V), ins.imm_);		break;
+        case JZN:	perform_jump(registers_.PSR(Z) ||
+            registers_.PSR(N), ins.imm_);		break;
+        case SYSCALL: {
+            try {
+                syscall::template syscall_table_<Core::memory, Core::registers>.at(
+                    static_cast<std::uint32_t>(ins.imm_))
+                    (this->memory_, this->registers_);
             }
-            default:
-                trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-                    "Error: Unrecoganized instruction type detected!");
-                break;
+            catch (const std::out_of_range&) {
+                trace_log<Tracer::LogCriticalLvls::ERROR, std::out_of_range>(
+                    "Error: Unrecoganized SYSCALL number!");
+            }
+            break;
+        }
+        default:
+            trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+                "Error: Unrecoganized instruction type detected!");
+            break;
         }
         return true;
     }
@@ -1624,41 +1423,41 @@ private:
             trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>("Error: Jump-type instruction fall through!");
         }
         // lambda function to help create ALU input for R & I type instruction
-        auto make_ALUIn_RI = [this](const instruct & ins, ALU_OpCode op) -> alu_in {
+        auto make_ALUIn_RI = [this](const instruct& ins, ALU_OpCode op) -> alu_in {
             switch (ins.type_) {
-                case R_t:	return make_ALUIn<sysb>(op, registers_.GP(ins.Rm_), registers_.GP(ins.Rn_));
-                case I_t:	return make_ALUIn<sysb>(op, registers_.GP(ins.Rm_), ins.imm_);
-                default:	trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-                                "Error: Unrecoganized instruction type detected!");
+            case R_t:	return make_ALUIn<sysb>(op, registers_.GP(ins.Rm_), registers_.GP(ins.Rn_));
+            case I_t:	return make_ALUIn<sysb>(op, registers_.GP(ins.Rm_), ins.imm_);
+            default:	trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+                "Error: Unrecoganized instruction type detected!");
             }
             // dummy return value to silent compiler warning
             return alu_in{};
-        };
+            };
         switch (ins.code_) {
             // Arithmetic Ops
-            case ADD:		return make_ALUIn_RI(ins, ALU_OpCode::ADD);
-            case UMUL:		return make_ALUIn_RI(ins, ALU_OpCode::UMUL);
-            case UDIV:		return make_ALUIn_RI(ins, ALU_OpCode::UDIV);
-            case UMOL:		return make_ALUIn_RI(ins, ALU_OpCode::UMOL);
+        case ADD:		return make_ALUIn_RI(ins, ALU_OpCode::ADD);
+        case UMUL:		return make_ALUIn_RI(ins, ALU_OpCode::UMUL);
+        case UDIV:		return make_ALUIn_RI(ins, ALU_OpCode::UDIV);
+        case UMOL:		return make_ALUIn_RI(ins, ALU_OpCode::UMOL);
             // Binary Logical Ops
-            case AND:		return make_ALUIn_RI(ins, ALU_OpCode::AND);
-            case ORR:		return make_ALUIn_RI(ins, ALU_OpCode::ORR);
-            case XOR:		return make_ALUIn_RI(ins, ALU_OpCode::XOR);
-            case SHL:		return make_ALUIn_RI(ins, ALU_OpCode::SHL);
-            case SHR:		return make_ALUIn_RI(ins, ALU_OpCode::SHR);
-            case RTL:		return make_ALUIn_RI(ins, ALU_OpCode::RTL);
-            case RTR:		return make_ALUIn_RI(ins, ALU_OpCode::RTR);
+        case AND:		return make_ALUIn_RI(ins, ALU_OpCode::AND);
+        case ORR:		return make_ALUIn_RI(ins, ALU_OpCode::ORR);
+        case XOR:		return make_ALUIn_RI(ins, ALU_OpCode::XOR);
+        case SHL:		return make_ALUIn_RI(ins, ALU_OpCode::SHL);
+        case SHR:		return make_ALUIn_RI(ins, ALU_OpCode::SHR);
+        case RTL:		return make_ALUIn_RI(ins, ALU_OpCode::RTL);
+        case RTR:		return make_ALUIn_RI(ins, ALU_OpCode::RTR);
             // Uniary Logical Ops
             // for uniary operations, only the first operand is used, second is discarded (0x0)
-            case NOT:		return make_ALUIn<sysb>(ALU_OpCode::COMP, registers_.GP(ins.Rm_), 0x0);
+        case NOT:		return make_ALUIn<sysb>(ALU_OpCode::COMP, registers_.GP(ins.Rm_), 0x0);
             // Load and Store Ops
-            case LDR:		return make_ALUIn<sysb>(ALU_OpCode::PASS, registers_.GP(ins.Rm_), 0x0);
-            case STR:		return make_ALUIn<sysb>(ALU_OpCode::PASS, registers_.GP(ins.Rm_), 0x0);
+        case LDR:		return make_ALUIn<sysb>(ALU_OpCode::PASS, registers_.GP(ins.Rm_), 0x0);
+        case STR:		return make_ALUIn<sysb>(ALU_OpCode::PASS, registers_.GP(ins.Rm_), 0x0);
             // Stack Ops
-            case PUSH:		return make_ALUIn<sysb>(ALU_OpCode::ADD, registers_.GP(SP), -1);
-            case POP:		return make_ALUIn<sysb>(ALU_OpCode::ADD, registers_.GP(SP),  1);
-            default:		trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-                                "Error: Unrecoganized instruction type detected!");
+        case PUSH:		return make_ALUIn<sysb>(ALU_OpCode::ADD, registers_.GP(SP), -1);
+        case POP:		return make_ALUIn<sysb>(ALU_OpCode::ADD, registers_.GP(SP), 1);
+        default:		trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
+            "Error: Unrecoganized instruction type detected!");
         }
         // dummy return value to silent compiler warning
         return alu_in{};
@@ -1709,5 +1508,269 @@ private:
     segment		segments_{};
 
     // The tracer pointer is used to record CPU state information
-    Tracer*		tracer_;
+    Tracer* tracer_;
 };
+
+
+
+
+
+
+//namespace scsp::tracer
+//{
+//    template <typename Exception>
+//    concept valid_exception = requires
+//    {
+//        requires
+//        std::derived_from<Exception, std::exception>;
+//    };
+//
+//    template <typename Object>
+//    using const_lref_type = const std::add_lvalue_reference_t<Object>;
+//
+//    class Tracer
+//    {
+//    public:
+//        enum struct CriticalLvls : std::int8_t
+//        {
+//            INFO,
+//            WARNING,
+//            ERROR
+//        };
+//
+//        struct Labels
+//        {
+//            using enum ::scsp::register_file::GPReg;
+//            using enum ::scsp::register_file::SEGReg;
+//            using enum ::scsp::register_file::PSRReg;
+//            using enum ::scsp::decode::OpCode;
+//            using enum ::scsp::decode::OpType;
+//
+//            using gp_translation_type  = const std::map<::scsp::register_file::GPReg,            std::string_view>;
+//            using psr_translation_type = const std::unordered_map<::scsp::register_file::PSRReg, char            >;
+//            using seg_translation_type = const std::unordered_map<::scsp::register_file::SEGReg, std::string_view>;
+//            using opc_translation_type = const std::unordered_map<::scsp::decode::OpCode,        std::string_view>;
+//            using opt_translation_type = const std::unordered_map<::scsp::decode::OpType,        std::string_view>;
+//
+//            static inline gp_translation_type gp_translation = {
+//                {R0, "R0"  },   {R1, "R1"},   {R2, "R2"  },   {R3, "R3"  },
+//                {R4, "R4"  },   {R5, "R5"},   {R6, "R6"  },   {R7, "R7"  },
+//                {R8, "R8"  },   {R9, "R9"},   {R10, "R10"},   {R11, "R11"},
+//                {R12, "R12"},   {SP, "SP"},   {LR, "LR"  },   {PC, "PC"  }
+//            };
+//
+//            static inline psr_translation_type psr_translation = {
+//                {N, 'N'},
+//                {Z, 'Z'},
+//                {C, 'C'},
+//                {V, 'V'}
+//            };
+//
+//            static inline seg_translation_type seg_translation = {
+//                {CS, "Code Segment"},
+//                {DS, "Data Segment"},
+//                {SS, "Stack Segment"},
+//                {ES, "Extra Segment"}
+//            };
+//
+//            static inline opt_translation_type opt_translation = {
+//                {Rt, "R type"},
+//                {It, "I type"},
+//                {Ut, "U type"},
+//                {St, "S type"},
+//                {Jt, "J type"}
+//            };
+//
+//            static inline opc_translation_type opc_translation = {
+//                {ADD, "ADD"}, {UMUL, "UMUL"}, {UDIV, "UDIV"}, {UMOL, "UMOL"},
+//
+//                {AND, "AND"}, {ORR, "ORR"}, {XOR, "XOR"}, {SHL, "SHL"},
+//                {SHR, "SHR"}, {RTL, "RTL"}, {RTR, "RTR"}, {NOT, "NOT"},
+//
+//                {LDR, "LDR"}, {STR, "STR"}, {PUSH, "PUSH"}, {POP, "POP"},
+//
+//                {JMP, "JMP"}, {JZ, "JZ"}, {JN, "JN"}, {JC, "JC"}, {JV, "JV"}, {JZN, "JZN"},
+//
+//                {SYSCALL, "SYSCALL"}
+//            };
+//        };
+//
+//    public:
+//        [[nodiscard]] explicit
+//        Tracer(const std::filesystem::path& log_path)
+//            : m_log_file{ std::filesystem::absolute(log_path).c_str() }
+//            , m_instruction_count{ 0 }
+//        {
+//            if (!m_log_file.is_open())
+//            {
+//                throw std::filesystem::filesystem_error(
+//                    "Failed to create the log file.",
+//                    std::error_code(1, std::system_category())
+//                );
+//            }
+//        }
+//
+//    public:
+//        template <Tracer::CriticalLvls Level    ,
+//                  valid_exception      Exception>
+//        auto log(const std::string_view& message)
+//            -> void
+//        {
+//            m_log_file <<
+//                [](Tracer::CriticalLvls level)
+//                    -> std::string_view
+//                {
+//                    using enum ::scsp::tracer::Tracer::CriticalLvls;
+//                    switch (level)
+//                    {
+//                        case INFO:      return "INFO: "   ;
+//                        case WARNING:   return "WARNING: ";
+//                        case ERROR:     return"ERROR: "   ;
+//                        default:        throw std::runtime_error("Unknown critical level.");
+//                    }
+//                }(Level);
+//
+//            m_log_file << message << '\n';
+//            
+//            if (Level == Tracer::CriticalLvls::ERROR)
+//            {
+//                m_log_file.close();
+//                throw Exception(message.data());
+//            }
+//        }
+//
+//        template <std::unsigned_integral T             ,
+//                  typename Instruction, typename Memory,
+//                  typename Register,    typename Segment>
+//        auto generateTrace(const T binary,
+//                           const_lref_type<Instruction> instruction, const_lref_type<Memory>  memory,
+//                           const_lref_type<Register>    registers,   const_lref_type<Segment> segments) noexcept
+//            -> void
+//        {
+//
+//        }
+//
+//    private:
+//        template <typename Memory, typename Segment>
+//        auto getMemory(const_lref_type<Memory> memory, const_lref_type<Segment> segments)
+//            -> std::string
+//        {
+//            std::stringstream ss_segments{};
+//            std::stringstream ss_values{};
+//
+//            for (const auto& p : segments)
+//            {
+//                try
+//                {
+//                    ss_segments << Labels::seg_translation.at(static_cast<::scsp::register_file::SEGReg>(p.first));
+//                }
+//                catch (const std::out_of_range&)
+//                {
+//                    Tracer::log<CriticalLvls::ERROR, std::out_of_range>(
+//                        "No corresponding segment translation."
+//                    );
+//                }
+//
+//                for (auto i = p.second.first; i <= p.)
+//            }
+//        }
+//
+//    private:
+//        std::ofstream m_log_file;
+//        std::uint32_t m_instruction_count;
+//    };
+//}
+//
+//
+//
+//
+//
+//            
+//
+//
+//        for (auto i{ p.second.first }; i <= p.second.second; ++i) {
+//            ss_value << static_cast<std::uint32_t>(mem.read_slot(i).value()) << ',';
+//        }
+//        formatter(ss_seg, ss_value);
+//
+//    return ss_seg.str();
+//
+//
+//
+//
+//
+//        //trace_file_ << get_heading(binary);
+//        //trace_file_ << get_instr<Ins>(instr);
+//        //trace_file_ << get_reg<Reg>(registers);
+//        //trace_file_ << get_mem<Mem, Seg>(memory, segments);
+//        //trace_file_ << '\n';
+//        //++inst_count;
+//
+//
+//
+//
+//    template <class Reg>
+//    auto get_reg(const std::add_lvalue_reference_t<Reg> regs) const noexcept -> std::string {
+//        std::stringstream ss_label{}, ss_value{};
+//        std::ranges::for_each(labels_.gp_trans_, [&](const auto p)->void {
+//            ss_label << p.second << ','; ss_value << regs.GP(p.first) << ','; });
+//        formatter(ss_label, ss_value);
+//        std::ranges::for_each(labels_.psr_trans_, [&](const auto p)->void {
+//            ss_label << p.second << ','; ss_value << regs.PSR(p.first) << ','; });
+//        formatter(ss_label, ss_value);
+//        return ss_label.str();
+//    }
+//
+//    static auto formatter(std::stringstream& l, std::stringstream& v) noexcept -> void {
+//        l << '\n';
+//        v << '\n';
+//        l << v.str();
+//        v.str(std::string{});
+//    }
+//
+//    template <class Ins>
+//    auto get_instr(const std::add_lvalue_reference_t<Ins> inst) -> std::string {
+//        std::stringstream ss_label{}, ss_value{};
+//        const std::array<std::string_view, 6> l{ "OpType", "OpCode", "Rd", "Rm", "Rn", "Imm" };
+//        const std::array<typename Ins::Rt, 3> regs{ inst.Rd_, inst.Rm_, inst.Rn_ };
+//        std::ranges::for_each(l, [&ss_label](const auto v)->void {ss_label << v << ','; });
+//        ss_label << '\n';
+//        try {
+//            ss_value << labels_.type_trans_.at(static_cast<OpType>(inst.type_)) << ',';
+//            ss_value << labels_.code_trans_.at(static_cast<OpCode>(inst.code_)) << ',';
+//            std::ranges::for_each(regs, [this, &ss_value](const auto v)->void {
+//                ss_value << labels_.gp_trans_.at(static_cast<GPReg>(v)) << ','; });
+//        }
+//        catch (const std::out_of_range&) {
+//            Tracer::log<Tracer::LogCriticalLvls::ERROR, std::out_of_range>(
+//                "Error: Tracer::type_trans_ / Tracer::code_trans_ / Tracer::gp_trans_ "
+//                "- No corresponding translation!"
+//            );
+//        }
+//        // immediate value
+//        ss_value << static_cast<std::uint32_t>(inst.imm_) << '\n';
+//        ss_label << ss_value.str();
+//        return ss_label.str();
+//    }
+//
+//    template <std::unsigned_integral T>
+//    static auto get_heading(T binary) noexcept -> std::string {
+//        std::stringstream ss;
+//        ss << "Instruction #, 0x" << std::setfill('0') << std::setw(sizeof(T) * 2)
+//            << std::hex << binary << '\n';
+//        return ss.str();
+//    }
+//
+//};
+//
+//
+//
+//
+
+
+
+
+
+
+
+
