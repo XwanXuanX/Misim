@@ -1124,64 +1124,402 @@ namespace scsp::syscall
 }
 
 
+namespace scsp::tracer
+{
+    template <typename Exception>
+    concept valid_exception = requires
+    {
+        requires
+        std::derived_from<Exception, std::exception>;
+    };
+
+    template <typename Object>
+    using const_lref_type = const std::add_lvalue_reference_t<Object>;
+
+    class Tracer
+    {
+    public:
+        enum struct CriticalLvls : std::int8_t
+        {
+            INFO,
+            WARNING,
+            ERROR
+        };
+
+        struct Labels
+        {
+            using enum ::scsp::register_file::GPReg;
+            using enum ::scsp::register_file::SEGReg;
+            using enum ::scsp::register_file::PSRReg;
+            using enum ::scsp::decode::OpCode;
+            using enum ::scsp::decode::OpType;
+
+            using gp_translation_type  = const std::map<::scsp::register_file::GPReg,            std::string_view>;
+            using psr_translation_type = const std::unordered_map<::scsp::register_file::PSRReg, char            >;
+            using seg_translation_type = const std::unordered_map<::scsp::register_file::SEGReg, std::string_view>;
+            using opc_translation_type = const std::unordered_map<::scsp::decode::OpCode,        std::string_view>;
+            using opt_translation_type = const std::unordered_map<::scsp::decode::OpType,        std::string_view>;
+
+            static inline gp_translation_type gp_translation = {
+                {R0, "R0"  },   {R1, "R1"},   {R2, "R2"  },   {R3, "R3"  },
+                {R4, "R4"  },   {R5, "R5"},   {R6, "R6"  },   {R7, "R7"  },
+                {R8, "R8"  },   {R9, "R9"},   {R10, "R10"},   {R11, "R11"},
+                {R12, "R12"},   {SP, "SP"},   {LR, "LR"  },   {PC, "PC"  }
+            };
+
+            static inline psr_translation_type psr_translation = {
+                {N, 'N'},
+                {Z, 'Z'},
+                {C, 'C'},
+                {V, 'V'}
+            };
+
+            static inline seg_translation_type seg_translation = {
+                {CS, "Code Segment" },
+                {DS, "Data Segment" },
+                {SS, "Stack Segment"},
+                {ES, "Extra Segment"}
+            };
+
+            static inline opt_translation_type opt_translation = {
+                {Rt, "R type"},
+                {It, "I type"},
+                {Ut, "U type"},
+                {St, "S type"},
+                {Jt, "J type"}
+            };
+
+            static inline opc_translation_type opc_translation = {
+                {ADD, "ADD"}, {UMUL, "UMUL"}, {UDIV, "UDIV"}, {UMOL, "UMOL"},
+
+                {AND, "AND"}, {ORR, "ORR"}, {XOR, "XOR"}, {SHL, "SHL"},
+                {SHR, "SHR"}, {RTL, "RTL"}, {RTR, "RTR"}, {NOT, "NOT"},
+
+                {LDR, "LDR"}, {STR, "STR"}, {PUSH, "PUSH"}, {POP, "POP"},
+
+                {JMP, "JMP"}, {JZ, "JZ"}, {JN, "JN"}, {JC, "JC"}, {JV, "JV"}, {JZN, "JZN"},
+
+                {SYSCALL, "SYSCALL"}
+            };
+        };
+
+    public:
+        [[nodiscard]] explicit
+        Tracer(const std::filesystem::path& log_path)
+            : m_log_file{ std::filesystem::absolute(log_path).c_str() }
+            , m_instruction_count{ 0 }
+        {
+            if (!m_log_file.is_open())
+            {
+                throw std::filesystem::filesystem_error(
+                    "Failed to create the log file.",
+                    std::error_code(1, std::system_category())
+                );
+            }
+        }
+
+    public:
+        template <Tracer::CriticalLvls Level, valid_exception Exception>
+        auto log(const std::string_view& message)
+            -> void
+        {
+            m_log_file << [](Tracer::CriticalLvls level)
+                              -> std::string_view
+                          {
+                              using enum ::scsp::tracer::Tracer::CriticalLvls;
+                              switch (level)
+                              {
+                                  case INFO:      return "INFO: "   ;
+                                  case WARNING:   return "WARNING: ";
+                                  case ERROR:     return"ERROR: "   ;
+                                  default:        throw std::runtime_error("Unknown critical level.");
+                              }
+                          } (Level);
+
+            m_log_file << message
+                       << '\n';
+
+            if (Level == Tracer::CriticalLvls::ERROR)
+            {
+                m_log_file.close();
+                throw Exception(message.data());
+            }
+        }
+
+        template <std::unsigned_integral T             ,
+                  typename Instruction, typename Memory,
+                  typename Register   , typename Segment>
+        auto generateTrace(const T binary,
+                           const_lref_type<Instruction> instruction, const_lref_type<Memory>  memory,
+                           const_lref_type<Register>    registers,   const_lref_type<Segment> segments) noexcept
+            -> void
+        {
+            m_log_file << getHeading(binary)
+                       << getInstruction<Instruction>(instruction)
+                       << getRegister<Register>(registers)
+                       << getMemory<Memory, Segment>(memory, segments)
+                       << '\n';
+
+            ++m_instruction_count;
+        }
+
+    private:
+        template <typename Register>
+        auto getRegister(const_lref_type<Register> registers) noexcept
+            -> std::string
+        {
+            std::stringstream ss_label{};
+            std::stringstream ss_value{};
+
+            std::ranges::for_each(
+                Labels::gp_translation,
+                [&](const auto p) {
+                    ss_label << p.second << ',';
+                    ss_value << registers.getGeneralPurpose(p.first) << ',';
+                }
+            );
+            formatter(ss_label, ss_value);
+
+            std::ranges::for_each(
+                Labels::psr_translation,
+                [&](const auto p) {
+                    ss_label << p.second << ',';
+                    ss_value << registers.getProgramStatus(p.first) << ',';
+                }
+            );
+            formatter(ss_label, ss_value);
+
+            return ss_label.str();
+        }
+
+        template <typename Memory, typename Segment> static
+        auto getMemory(const_lref_type<Memory> memory, const_lref_type<Segment> segments)
+            -> std::string
+        {
+            std::stringstream ss_segments{};
+            std::stringstream ss_values{};
+
+            for (const auto& p : segments)
+            {
+                try {
+                    ss_segments << Labels::seg_translation.at(static_cast<::scsp::register_file::SEGReg>(p.first));
+                }
+                catch (const std::out_of_range&) {
+                    Tracer::log<CriticalLvls::ERROR, std::out_of_range>(
+                        "No corresponding segment translation."
+                    );
+                }
+
+                for (auto i = p.second.m_start; i <= p.second.m_end; ++i) {
+                    ss_values << static_cast<std::uint32_t>(memory.read(i).value()) << ',';
+                }
+
+                formatter(ss_segments, ss_values);
+            }
+
+            return ss_segments.str();
+        }
+
+        template <typename Instruction> static
+        auto getInstruction(const_lref_type<Instruction> instruction)
+            -> std::string
+        {
+            std::stringstream ss_label{};
+            std::stringstream ss_value{};
+
+            constexpr std::array<std::string_view, 6> labels{
+                "OpType", "OpCode",
+                "Rd", "Rm", "Rn", 
+                "Imm"
+            };
+            const std::array<typename Instruction::register_type, 3> registers{
+                instruction.m_Rd,
+                instruction.m_Rm,
+                instruction.m_Rn,
+            };
+
+            std::ranges::for_each(
+                labels,
+                [&ss_label](const auto v) {
+                    ss_label << v << ',';
+                }
+            );
+            ss_label << '\n';
+
+            try
+            {
+                ss_value << Labels::opt_translation.at(static_cast<::scsp::decode::OpType>(instruction.m_type))
+                         << ',';
+                ss_value << Labels::opc_translation.at(static_cast<::scsp::decode::OpCode>(instruction.m_code))
+                         << ',';
+                std::ranges::for_each(
+                    registers,
+                    [&ss_value](const auto v) {
+                        ss_value << Labels::gp_translation.at(static_cast<::scsp::register_file::GPReg>(v))
+                                 << ',';
+                    }
+                );
+            }
+            catch (cosnt std::out_of_range&)
+            {
+                Tracer::log<CriticalLvls::ERROR, std::out_of_range>(
+                    "No corresponding instruction translation."
+                );
+            }
+
+            ss_value << static_cast<std::uint32_t>(instruction.m_imm) << '\n';
+            ss_label << ss_value.str();
+
+            return ss_label.str();
+        }
+
+        template <std::unsigned_integral T>
+        auto getHeading(const T binary) const noexcept
+            -> std::string
+        {
+            std::stringstream ss;
+            ss << "Instruction #" << m_instruction_count
+               << ", 0x"
+               << std::setfill('0')
+               << std::setw(sizeof(T) * 2)
+               << std::hex
+               << binary
+               << '\n';
+            
+            return ss.str();
+        }
+
+        static
+        auto formatter(std::stringstream& label, std::stringstream& value) noexcept
+            -> void
+        {
+            label << '\n';
+            value << '\n';
+            label << value.str();
+            value.str(std::string{});
+        }
+
+    private:
+        std::ofstream m_log_file;
+        std::uint32_t m_instruction_count;
+    };
+}
 
 
 
 
 
 
-template <typename Sy, typename T, typename... Ts>
-concept is_valid_data = std::convertible_to<T, Sy> && (std::same_as<T, Ts> || ...);
 
-template <std::unsigned_integral B, std::size_t S, class SysT>
-class Core {
-public:
-    using sysb = B;						// system bit
-    const std::size_t mem_size = S;		// memory size
 
-    // components
-    using memory = memory<sysb, S>;
-    using registers = Registers<sysb>;
-    using decoder = Decoder<default_encoding>;
-    using alu = ALU;
 
-    // sub-components
-    using instruct = typename decoder::instr_type;
-    using alu_in = ALU_in<sysb>;
-    using alu_out = ALU_out<sysb>;
 
-    // helper definition
-    using segment = std::unordered_map<SEGReg, std::pair<sysb, sysb>>;
-    using syscall = SysT;
 
-    // memory layout
+
+
+
+
+
+
+
+
+namespace scsp::core
+{
     /*
-    *  _________________  <----------- Top
-    * |_________________|
-    * |					| \
-    * |	 Extra Segment  | | 64KB (magic fields :)
-    * |_________________| /<----------- ES reg
-    * |_________________|
-    * |				    | \
-    * |					| |
-    * |	 Stack Segment  | | 64KB
-    * |					| |
-    * |					| |
-    * |_________________| / <----------- SS reg
-    * |_________________|
-    * |					| \
-    * |	  Data Segment  | | 64KB
-    * |					| |
-    * |_________________| / <----------- DS reg
-    * |_________________|
-    * |					| \
-    * |	  Code Segment  | | 64KB
-    * |_________________| / <---------- CS reg
-    * |_________________| <----------- Bottom (vector table or nullptr)
-    */
+     * Memory Layout
+     * 
+     *  _________________  <----------- Top
+     * |_________________|
+     * |				 | \
+     * |  Extra Segment  | | 64KB (magic fields :)
+     * |_________________| /<----------- ES reg
+     * |_________________|
+     * |				 | \
+     * |			     | |
+     * |  Stack Segment  | | 64KB
+     * |				 | |
+     * |				 | |
+     * |_________________| / <----------- SS reg
+     * |_________________|
+     * |				 | \
+     * |   Data Segment  | | 64KB
+     * |				 | |
+     * |_________________| / <----------- DS reg
+     * |_________________|
+     * |				 | \
+     * |   Code Segment  | | 64KB
+     * |_________________| / <---------- CS reg
+     * |_________________| <----------- Bottom (vector table or nullptr)
+     */
 
-    // Initialize segment registers and define size for each segment
-    // Initialize values for GP registers
+    template <typename SystemBit, typename Data, typename... Datas>
+    concept valid_data = requires
+    {
+        requires
+        std::convertible_to<Data, SystemBit> && (std::same_as<Data, Datas> || ...);
+    };
+
+    namespace mm = ::scsp::memory;
+    namespace rf = ::scsp::register_file;
+    namespace dc = ::scsp::decode;
+    namespace au = ::scsp::ALU;
+
+    template <std::unsigned_integral SystemBit,
+              std::size_t MemorySize,
+              typename SyscallTable>
+    class Core
+    {
+    public:
+        using system_bit_type         = SystemBit;
+        const std::size_t memory_size = MemorySize;
+
+        using memory_type      = mm::Memory<system_bit_type, MemorySize>;
+        using register_type    = rf::Registers<system_bit_type>;
+        using decoder_type     = dc::Decoder<dc::DefaultEncoding>;
+        using alu_type         = au::ALU;
+
+        using instruction_type = typename decoder_type::instruction_type;
+        using alu_in_type      = au::ALUInput<system_bit_type>;
+        using alu_out_type     = au::ALUOutput<system_bit_type>;
+
+        struct Segment
+        {
+            using value_type = std::uint32_t;
+
+            value_type m_start;
+            value_type m_end;
+        };
+
+        using segment_type = std::unordered_map<rf::SEGReg, Segment>;
+        using syscall_type = SyscallTable;
+
+    public:
+
+
+
+
+
+    private:
+        memory_type   m_memory{};
+        register_type m_register{};
+        segment_type  m_segment{};
+    };
+}
+
+
+private:
+    memory		memory_{};
+    registers	registers_{};
+
+    // The memory or registers are not aware of memory segmentation
+    segment		segments_{};
+
+    // The tracer pointer is used to record CPU state information
+    Tracer* tracer_;
+};
+
+
+
     template <typename SG>
         requires std::same_as<segment, std::remove_reference_t<SG>>
     constexpr auto init(SG&& seg_config) noexcept -> bool {
@@ -1500,272 +1838,11 @@ private:
         return p >= seg.first && p <= seg.second;
     }
 
-private:
-    memory		memory_{};
-    registers	registers_{};
-
-    // The memory or registers are not aware of memory segmentation
-    segment		segments_{};
-
-    // The tracer pointer is used to record CPU state information
-    Tracer* tracer_;
-};
 
 
 
 
 
-
-//namespace scsp::tracer
-//{
-//    template <typename Exception>
-//    concept valid_exception = requires
-//    {
-//        requires
-//        std::derived_from<Exception, std::exception>;
-//    };
-//
-//    template <typename Object>
-//    using const_lref_type = const std::add_lvalue_reference_t<Object>;
-//
-//    class Tracer
-//    {
-//    public:
-//        enum struct CriticalLvls : std::int8_t
-//        {
-//            INFO,
-//            WARNING,
-//            ERROR
-//        };
-//
-//        struct Labels
-//        {
-//            using enum ::scsp::register_file::GPReg;
-//            using enum ::scsp::register_file::SEGReg;
-//            using enum ::scsp::register_file::PSRReg;
-//            using enum ::scsp::decode::OpCode;
-//            using enum ::scsp::decode::OpType;
-//
-//            using gp_translation_type  = const std::map<::scsp::register_file::GPReg,            std::string_view>;
-//            using psr_translation_type = const std::unordered_map<::scsp::register_file::PSRReg, char            >;
-//            using seg_translation_type = const std::unordered_map<::scsp::register_file::SEGReg, std::string_view>;
-//            using opc_translation_type = const std::unordered_map<::scsp::decode::OpCode,        std::string_view>;
-//            using opt_translation_type = const std::unordered_map<::scsp::decode::OpType,        std::string_view>;
-//
-//            static inline gp_translation_type gp_translation = {
-//                {R0, "R0"  },   {R1, "R1"},   {R2, "R2"  },   {R3, "R3"  },
-//                {R4, "R4"  },   {R5, "R5"},   {R6, "R6"  },   {R7, "R7"  },
-//                {R8, "R8"  },   {R9, "R9"},   {R10, "R10"},   {R11, "R11"},
-//                {R12, "R12"},   {SP, "SP"},   {LR, "LR"  },   {PC, "PC"  }
-//            };
-//
-//            static inline psr_translation_type psr_translation = {
-//                {N, 'N'},
-//                {Z, 'Z'},
-//                {C, 'C'},
-//                {V, 'V'}
-//            };
-//
-//            static inline seg_translation_type seg_translation = {
-//                {CS, "Code Segment"},
-//                {DS, "Data Segment"},
-//                {SS, "Stack Segment"},
-//                {ES, "Extra Segment"}
-//            };
-//
-//            static inline opt_translation_type opt_translation = {
-//                {Rt, "R type"},
-//                {It, "I type"},
-//                {Ut, "U type"},
-//                {St, "S type"},
-//                {Jt, "J type"}
-//            };
-//
-//            static inline opc_translation_type opc_translation = {
-//                {ADD, "ADD"}, {UMUL, "UMUL"}, {UDIV, "UDIV"}, {UMOL, "UMOL"},
-//
-//                {AND, "AND"}, {ORR, "ORR"}, {XOR, "XOR"}, {SHL, "SHL"},
-//                {SHR, "SHR"}, {RTL, "RTL"}, {RTR, "RTR"}, {NOT, "NOT"},
-//
-//                {LDR, "LDR"}, {STR, "STR"}, {PUSH, "PUSH"}, {POP, "POP"},
-//
-//                {JMP, "JMP"}, {JZ, "JZ"}, {JN, "JN"}, {JC, "JC"}, {JV, "JV"}, {JZN, "JZN"},
-//
-//                {SYSCALL, "SYSCALL"}
-//            };
-//        };
-//
-//    public:
-//        [[nodiscard]] explicit
-//        Tracer(const std::filesystem::path& log_path)
-//            : m_log_file{ std::filesystem::absolute(log_path).c_str() }
-//            , m_instruction_count{ 0 }
-//        {
-//            if (!m_log_file.is_open())
-//            {
-//                throw std::filesystem::filesystem_error(
-//                    "Failed to create the log file.",
-//                    std::error_code(1, std::system_category())
-//                );
-//            }
-//        }
-//
-//    public:
-//        template <Tracer::CriticalLvls Level    ,
-//                  valid_exception      Exception>
-//        auto log(const std::string_view& message)
-//            -> void
-//        {
-//            m_log_file <<
-//                [](Tracer::CriticalLvls level)
-//                    -> std::string_view
-//                {
-//                    using enum ::scsp::tracer::Tracer::CriticalLvls;
-//                    switch (level)
-//                    {
-//                        case INFO:      return "INFO: "   ;
-//                        case WARNING:   return "WARNING: ";
-//                        case ERROR:     return"ERROR: "   ;
-//                        default:        throw std::runtime_error("Unknown critical level.");
-//                    }
-//                }(Level);
-//
-//            m_log_file << message << '\n';
-//            
-//            if (Level == Tracer::CriticalLvls::ERROR)
-//            {
-//                m_log_file.close();
-//                throw Exception(message.data());
-//            }
-//        }
-//
-//        template <std::unsigned_integral T             ,
-//                  typename Instruction, typename Memory,
-//                  typename Register,    typename Segment>
-//        auto generateTrace(const T binary,
-//                           const_lref_type<Instruction> instruction, const_lref_type<Memory>  memory,
-//                           const_lref_type<Register>    registers,   const_lref_type<Segment> segments) noexcept
-//            -> void
-//        {
-//
-//        }
-//
-//    private:
-//        template <typename Memory, typename Segment>
-//        auto getMemory(const_lref_type<Memory> memory, const_lref_type<Segment> segments)
-//            -> std::string
-//        {
-//            std::stringstream ss_segments{};
-//            std::stringstream ss_values{};
-//
-//            for (const auto& p : segments)
-//            {
-//                try
-//                {
-//                    ss_segments << Labels::seg_translation.at(static_cast<::scsp::register_file::SEGReg>(p.first));
-//                }
-//                catch (const std::out_of_range&)
-//                {
-//                    Tracer::log<CriticalLvls::ERROR, std::out_of_range>(
-//                        "No corresponding segment translation."
-//                    );
-//                }
-//
-//                for (auto i = p.second.first; i <= p.)
-//            }
-//        }
-//
-//    private:
-//        std::ofstream m_log_file;
-//        std::uint32_t m_instruction_count;
-//    };
-//}
-//
-//
-//
-//
-//
-//            
-//
-//
-//        for (auto i{ p.second.first }; i <= p.second.second; ++i) {
-//            ss_value << static_cast<std::uint32_t>(mem.read_slot(i).value()) << ',';
-//        }
-//        formatter(ss_seg, ss_value);
-//
-//    return ss_seg.str();
-//
-//
-//
-//
-//
-//        //trace_file_ << get_heading(binary);
-//        //trace_file_ << get_instr<Ins>(instr);
-//        //trace_file_ << get_reg<Reg>(registers);
-//        //trace_file_ << get_mem<Mem, Seg>(memory, segments);
-//        //trace_file_ << '\n';
-//        //++inst_count;
-//
-//
-//
-//
-//    template <class Reg>
-//    auto get_reg(const std::add_lvalue_reference_t<Reg> regs) const noexcept -> std::string {
-//        std::stringstream ss_label{}, ss_value{};
-//        std::ranges::for_each(labels_.gp_trans_, [&](const auto p)->void {
-//            ss_label << p.second << ','; ss_value << regs.GP(p.first) << ','; });
-//        formatter(ss_label, ss_value);
-//        std::ranges::for_each(labels_.psr_trans_, [&](const auto p)->void {
-//            ss_label << p.second << ','; ss_value << regs.PSR(p.first) << ','; });
-//        formatter(ss_label, ss_value);
-//        return ss_label.str();
-//    }
-//
-//    static auto formatter(std::stringstream& l, std::stringstream& v) noexcept -> void {
-//        l << '\n';
-//        v << '\n';
-//        l << v.str();
-//        v.str(std::string{});
-//    }
-//
-//    template <class Ins>
-//    auto get_instr(const std::add_lvalue_reference_t<Ins> inst) -> std::string {
-//        std::stringstream ss_label{}, ss_value{};
-//        const std::array<std::string_view, 6> l{ "OpType", "OpCode", "Rd", "Rm", "Rn", "Imm" };
-//        const std::array<typename Ins::Rt, 3> regs{ inst.Rd_, inst.Rm_, inst.Rn_ };
-//        std::ranges::for_each(l, [&ss_label](const auto v)->void {ss_label << v << ','; });
-//        ss_label << '\n';
-//        try {
-//            ss_value << labels_.type_trans_.at(static_cast<OpType>(inst.type_)) << ',';
-//            ss_value << labels_.code_trans_.at(static_cast<OpCode>(inst.code_)) << ',';
-//            std::ranges::for_each(regs, [this, &ss_value](const auto v)->void {
-//                ss_value << labels_.gp_trans_.at(static_cast<GPReg>(v)) << ','; });
-//        }
-//        catch (const std::out_of_range&) {
-//            Tracer::log<Tracer::LogCriticalLvls::ERROR, std::out_of_range>(
-//                "Error: Tracer::type_trans_ / Tracer::code_trans_ / Tracer::gp_trans_ "
-//                "- No corresponding translation!"
-//            );
-//        }
-//        // immediate value
-//        ss_value << static_cast<std::uint32_t>(inst.imm_) << '\n';
-//        ss_label << ss_value.str();
-//        return ss_label.str();
-//    }
-//
-//    template <std::unsigned_integral T>
-//    static auto get_heading(T binary) noexcept -> std::string {
-//        std::stringstream ss;
-//        ss << "Instruction #, 0x" << std::setfill('0') << std::setw(sizeof(T) * 2)
-//            << std::hex << binary << '\n';
-//        return ss.str();
-//    }
-//
-//};
-//
-//
-//
-//
 
 
 
