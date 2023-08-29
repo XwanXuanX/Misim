@@ -1,18 +1,19 @@
-#include "tema.hpp"
+#include "overture.hpp"
 
 int main() {
 	std::cout << std::hex;
 	
-	using core = Core<std::uint32_t, 50, SyscallTable>;
-	core::segment seg = {
-		{DS, std::make_pair(31, 47)},
-		{ES, std::make_pair(48, 48)},
-		{SS, std::make_pair(25, 30)},
-		{CS, std::make_pair(0, 24)}
+	using core = ::scsp::core::Core<std::uint32_t, 50, ::scsp::syscall::SyscallTable>;
+	using enum ::scsp::register_file::SEGReg;
+	core::segment_type seg = {
+		{DS, {31, 47}},
+		{ES, {48, 48}},
+		{SS, {25, 30}},
+		{CS, {0,  24}}
 	};
-	Tracer t("C:\\Users\\lzlu1\\Desktop\\tracer.csv");
+	::scsp::tracer::Tracer t("C:\\Users\\lzlu1\\Desktop\\tracer2.csv");
 	core c{ std::move(seg), &t};
-	c.load_data(
+	c.dataLoader(
 		0x68,
 		0x65,
 		0x6c,
@@ -25,7 +26,7 @@ int main() {
 		0x6c,
 		0x64
 	);
-	c.load_instr(
+	c.instructionLoader(
 		0x00000060,
 		0x01f00001,
 		0x00111060,
