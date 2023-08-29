@@ -1406,23 +1406,6 @@ namespace scsp::tracer
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 namespace scsp::core
 {
     /*
@@ -1459,10 +1442,21 @@ namespace scsp::core
         std::convertible_to<Data, SystemBit> && (std::same_as<Data, Datas> || ...);
     };
 
+    template <typename SourceType, typename DestType>
+    concept valid_forwarding_reference_type = requires
+    {
+        requires
+        std::same_as<std::remove_reference_t<SourceType>,
+                     std::remove_reference_t<DestType>   >;
+        requires
+        std::is_constructible_v<DestType, SourceType>;
+    };
+
     namespace mm = ::scsp::memory;
     namespace rf = ::scsp::register_file;
     namespace dc = ::scsp::decode;
     namespace au = ::scsp::ALU;
+    namespace tr = ::scsp::tracer;
 
     template <std::unsigned_integral SystemBit,
               std::size_t MemorySize,
@@ -1482,7 +1476,7 @@ namespace scsp::core
         using alu_in_type      = au::ALUInput<system_bit_type>;
         using alu_out_type     = au::ALUOutput<system_bit_type>;
 
-        struct Segment
+        struct SegmentRange
         {
             using value_type = std::uint32_t;
 
@@ -1490,364 +1484,504 @@ namespace scsp::core
             value_type m_end;
         };
 
-        using segment_type = std::unordered_map<rf::SEGReg, Segment>;
+        using segment_type = std::unordered_map<rf::SEGReg, Core::SegmentRange>;
         using syscall_type = SyscallTable;
 
     public:
+        template <valid_forwarding_reference_type<segment_type> Segment> [[nodiscard]] constexpr explicit
+        Core(Segment&& segment_config)
+            : m_tracer{ nullptr }
+        {
+            if (!initialize(std::forward<Segment>(segment_config)))
+            {
+                traceLog<tr::Tracer::CriticalLvls::ERROR, std::runtime_error>("Failed to initialize segment.");
+            }
+        }
 
+        template <valid_forwarding_reference_type<segment_type> Segment> [[nodiscard]] constexpr explicit
+        Core(Segment&& segment_config, tr::Tracer* p_tracer)
+            : m_tracer{ p_tracer }
+        {
+            if (!initialize(std::forward<Segment>(segment_config)))
+            {
+                traceLog<tr::Tracer::CriticalLvls::ERROR, std::runtime_error>("Failed to initialize segment.");
+            }
+        }
 
+    public:
+        template <typename Instruction, typename... Instructions> 
+            requires (valid_data<system_bit_type, Instruction, Instructions...>) constexpr
+        auto instructionLoader(Instruction in, Instructions... ins) noexcept
+            -> void
+        {
+            using enum rf::SEGReg;
+            recursiveLoaderHelper(m_segment.at(CS).m_start, m_segment.at(CS).m_end, in, ins...);
+        }
 
+        template <typename Data, typename... Datas>
+            requires (valid_data<system_bit_type, Data, Datas...>) constexpr
+        auto dataLoader(Data da, Datas... das) noexcept
+            -> void
+        {
+            using enum rf::SEGReg;
+            recursiveLoaderHelper(m_segment.at(DS).m_start, m_segment.at(DS).m_end, da, das...);
+        }
 
+        constexpr
+        auto run()
+            -> void
+        {
+            using ::scsp::freefuncs::testBitAll;
+
+            for (;;)
+            {
+                auto binary = fetch();
+
+                if (testBitAll(binary))
+                {
+                    break;
+                }
+
+                instruction_type instruction = decoder_type::decode(binary);
+
+                if (checkJump(instruction))
+                {
+                    generateTrace(binary, instruction);
+                    continue;
+                }
+
+                auto result = execute(instruction);
+
+                memoryAccess(instruction, result);
+
+                generateTrace(binary, instruction);
+            }
+        }
+
+    private:
+        template <valid_forwarding_reference_type<segment_type> Segment> constexpr
+        auto initialize(Segment&& segment_config) noexcept
+            -> bool
+        {
+            using enum rf::SEGReg;
+            constexpr std::array<rf::SEGReg, 4> segment_registers{ CS, DS, SS, ES };
+            if (
+                !std::ranges::all_of(
+                    segment_registers, [&segment_config](rf::SEGReg sr) { return segment_config.contains(sr); }
+                ))
+            {
+                return false;
+            }
+            
+            std::vector<Core::SegmentRange> ranges{};
+            ranges.reserve(4);
+            for (auto&& r : segment_config) {
+                ranges.emplace_back(r.second);
+            }
+
+            auto checkInRange = [this](const Core::SegmentRange rng)
+                -> bool
+            {
+                return (
+                    rng.m_end   >= rng.m_start &&
+                    rng.m_start >= 0         &&
+                    rng.m_end   <  this->memory_size
+                );
+            };
+            if (!std::ranges::all_of(ranges, checkInRange)) {
+                return false;
+            }
+
+            std::ranges::sort(
+                ranges,
+                std::ranges::less{},
+                [](const Core::SegmentRange rng) { return rng.m_start };
+            );
+            auto checkOverlap = [](const Core::SegmentRange rng1, const Core::SegmentRange rng2)
+                -> bool
+            {
+                return rng1.m_start <= rng2.m_end && rng2.m_start <= rng1.m_end;
+            };
+            for (auto iter = ranges.cbegin() + 1; iter != ranges.cend(); ++iter)
+            {
+                if (checkOverlap(*(iter - 1), *iter)) {
+                    return false;
+                }
+            }
+
+            if (
+                SystemBit result = std::accumulate(
+                    ranges.begin(), ranges.end(), 0,
+                    [](SystemBit&& i, const Core::SegmentRange rng) { return i + (rng.m_end - rng.m_start) + 1; });
+                result > memory_size
+                )
+            {
+                return false;
+            }
+
+            m_segment = std::forward<Segment>(segment_config);
+
+            using enum rf::GPReg;
+            using enum rf::SEGReg;
+            m_register.getGeneralPurpose(SP) = m_segment.at(SS).m_end + 1;
+            m_register.getGeneralPurpose(PC) = m_segment.at(CS).m_start;
+
+            return true;
+        }
+
+        template <tr::Tracer::CriticalLvls Level, tr::valid_exception Exception> constexpr
+        auto traceLog(const std::string_view& message) const
+            -> void
+        {
+            if (m_tracer != nullptr)
+            {
+                m_tracer->log<Level, Exception>(message);
+                return;
+            }
+            if (Level == tr::Tracer::CriticalLvls::ERROR)
+            {
+                throw Exception(message.data());
+            }
+        }
+
+        constexpr
+        auto generateTrace(system_bit_type binary, instruction_type& instruction) noexcept
+            -> void
+        {
+            if (m_tracer != nullptr)
+            {
+                m_tracer->generateTrace<system_bit_type,
+                                        instruction_type, memory_type,
+                                        register_type,    segment_type>(binary, instruction, m_memory, m_register, m_segment);
+            }
+        }
+
+        template <std::unsigned_integral T> [[nodiscard]] inline static constexpr
+        auto checkAddressInrange(const T address, const Core::SegmentRange segment) noexcept
+            -> bool
+        {
+            return address >= segment.m_start && address <= segment.m_end;
+        }
+
+        constexpr
+        auto updatePsr(const typename alu_out_type::updated_flags_type& updated_flags) noexcept
+            -> void
+        {
+            m_register.clearPsrValue();
+
+            for (auto&& flag : updated_flags) {
+                m_register.setProgramStatus(flag, true);
+            }
+        }
+
+        template <typename T, typename... Ts> constexpr
+        auto recursiveLoaderHelper(std::size_t idx, std::size_t limit, T x, Ts... xs) noexcept
+            -> void
+        {
+            if (idx > limit) {
+                return;
+            }
+
+            m_memory.write(static_cast<system_bit_type>(x), idx);
+
+            if constexpr (sizeof...(Ts) > 0) {
+                recursiveLoaderHelper(idx + 1, limit, xs...);
+            }
+        }
+
+        template <std::convertible_to<typename alu_in_type::operand_width_type> T> inline static constexpr
+        auto makeALUInput(au::ALUOpCode alu_opcode, const T operand1, const T operand2) noexcept
+            -> alu_in_type
+        {
+            return alu_in_type{
+                alu_opcode,
+                {operand1, operand2}
+            };
+        }
+
+        [[nodiscard]] constexpr
+        auto fetch()
+            -> system_bit_type
+        {
+            using enum rf::GPReg;
+            using enum rf::SEGReg;
+
+            if (
+                !Core::checkAddressInrange<system_bit_type>(
+                    m_register.getGeneralPurpose(PC), 
+                    m_segment.at(CS)
+                ))
+            {
+                traceLog<tr::Tracer::CriticalLvls::ERROR, std::runtime_error>(
+                    "Error: PC exceeds CS boundary!"
+                );
+            }
+
+            if (
+                auto instruction = m_memory.read(m_register.getGeneralPurpose(PC));
+                instruction.has_value()
+                )
+            {
+                ++m_register.getGeneralPurpose(PC);
+                return *instruction;
+            }
+
+            traceLog<tr::Tracer::CriticalLvls::ERROR, std::runtime_error>(
+                "Error: Failed to read instruction from memory!"
+            );
+
+            return 0;
+        }
+
+        constexpr
+        auto generateALUInput(const instruction_type& instruction) const
+            -> alu_in_type
+        {
+            using enum dc::OpType;
+            using enum dc::OpCode;
+
+            if (instruction.m_type == Jt)
+            {
+                traceLog<tr::Tracer::CriticalLvls::ERROR, std::runtime_error>(
+                    "Jump-type instruction fall through!"
+                );
+            }
+
+            auto makeALUInputForRI = [this](const instruction_type& instruction, au::ALUOpCode opcode)
+                -> alu_in_type
+            {
+                using enum dc::OpType;
+                switch (switch_on)
+                {
+                    case Rt: {
+                        return makeALUInput<system_bit_type>(
+                            opcode, 
+                            m_register.getGeneralPurpose(instruction.m_Rm), 
+                            m_register.getGeneralPurpose(instruction.m_Rn)
+                        );
+                    }
+                    case It: {
+                        return makeALUInput<system_bit_type>(
+                            opcode, 
+                            m_register.getGeneralPurpose(instruction.m_Rm), 
+                            instruction.m_imm
+                        );
+                    }
+                    default: {
+                        traceLog<tr::Tracer::CriticalLvls::ERROR, std::runtime_error>(
+                            "Unknown instruction type detected."
+                        );
+                    }    
+                }
+
+                return alu_in_type{};
+            };
+
+            using au::ALUOpCode;
+            using enum rf::GPReg;
+            switch (instruction.m_code)
+            {
+                case ADD : { return makeALUInputForRI(instruction, ALUOpCode::ADD);  }
+                case UMUL: { return makeALUInputForRI(instruction, ALUOpCode::UMUL); }
+                case UDIV: { return makeALUInputForRI(instruction, ALUOpCode::UDIV); }
+                case UMOL: { return makeALUInputForRI(instruction, ALUOpCode::UMOL); }
+                case AND : { return makeALUInputForRI(instruction, ALUOpCode::AND);  }
+                case ORR : { return makeALUInputForRI(instruction, ALUOpCode::ORR);  }
+                case XOR : { return makeALUInputForRI(instruction, ALUOpCode::XOR);  }
+                case SHL : { return makeALUInputForRI(instruction, ALUOpCode::SHL);  }
+                case SHR : { return makeALUInputForRI(instruction, ALUOpCode::SHR);  }
+                case RTL : { return makeALUInputForRI(instruction, ALUOpCode::RTL);  }
+                case RTR : { return makeALUInputForRI(instruction, ALUOpCode::RTR);  } 
+                case NOT : {
+                    return makeALUInput<system_bit_type>(
+                        ALUOpCode::COMP, m_register.getGeneralPurpose(instruction.m_Rm), 0x0
+                    );
+                }
+                case LDR : {
+                    return makeALUInput<system_bit_type>(
+                        ALUOpCode::PASS, m_register.getGeneralPurpose(instruction.m_Rm), 0x0
+                    );
+                }
+                case STR : {
+                    return makeALUInput<system_bit_type>(
+                        ALUOpCode::PASS, m_register.getGeneralPurpose(instruction.m_Rm), 0x0
+                    );
+                }
+                case PUSH: {
+                    return makeALUInput<system_bit_type>(
+                        ALUOpCode::ADD, m_register.getGeneralPurpose(SP), -1
+                    );
+                }
+                case POP : {
+                    return makeALUInput<system_bit_type>(
+                        ALUOpCode::ADD, m_register.getGeneralPurpose(SP), 1
+                    );
+                }
+                default: {
+                    traceLog<tr::Tracer::CriticalLvls::ERROR, std::runtime_error>("Unknown OpCode detected.");
+                }
+            }
+
+            return alu_in_type{};
+        }
+
+        [[nodiscard]] constexpr
+        auto execute(const instruction_type& instruction)
+            -> typename alu_out_type::operand_width_type
+        {
+            const alu_out_type result = alu_type::execute<system_bit_type>(generateALUInput(instruction));
+            updatePsr(result.m_flags);
+            return result.m_result;
+        }
+
+        constexpr
+        auto checkJump(const instruction_type& instruction)
+            -> bool
+        {
+            using enum dc::OpType;
+            using enum dc::OpCode;
+            using enum rf::GPReg;
+            using enum rf::PSRReg;
+
+            if (instruction.m_type != Jt) {
+                return false;
+            }
+
+            auto performJump = [this](bool condition, typename register_type::GP_width_type dst) noexcept
+                -> void
+            {
+                if (condition) {
+                    m_register.getGeneralPurpose(PC) = dst;
+                }
+            };
+
+            switch (instruction.m_code)
+            {
+                case JMP: {
+                    performJump(true, instruction.m_imm);
+                    break;
+                }
+                case JZ:  {
+                    performJump(m_register.getProgramStatus(Z), instruction.m_imm);
+                    break; 
+                }
+                case JN:  {
+                    performJump(m_register.getProgramStatus(N), instruction.m_imm);
+                    break;
+                }
+                case JC:  {
+                    performJump(m_register.getProgramStatus(C), instruction.m_imm);
+                    break;
+                }
+                case JV:  {
+                    performJump(m_register.getProgramStatus(V), instruction.m_imm);
+                    break;
+                }
+                case JZN: {
+                    performJump(
+                        m_register.getProgramStatus(Z) || m_register.getProgramStatus(N),
+                        instruction.m_imm
+                    );
+                    break;
+                }
+                case SYSCALL: {
+                    try
+                    {
+                        syscall_type::template m_syscall_table<Core::memory_type, Core::register_type>.at(
+                            static_cast<std::uint32_t>(instruction.m_imm)
+                        ) (this->m_memory, this->m_register);
+                    }
+                    catch (const std::out_of_range&)
+                    {
+                        traceLog<tr::Tracer::CriticalLvls::ERROR, std::out_of_range>("Unknown syscall number.");
+                    }
+                    break;
+                }
+                default: {
+                    traceLog<tr::Tracer::CriticalLvls::ERROR, std::runtime_error>("Unknown OpCode detected.");
+                    break;
+                }
+            }
+
+            return true;
+        }
+
+        constexpr
+        auto memoryAccess(const instruction_type& instruction, system_bit_type addr_val)
+            -> void
+        {
+            using enum dc::OpCode;
+            using enum rf::SEGReg;
+            using enum rf::GPReg;
+
+            switch (instruction.m_code)
+            {
+                case LDR:
+                {
+                    if (
+                        auto result = m_memory.read(addr_val);
+                        result.has_value()
+                        )
+                    {
+                        m_register.getGeneralPurpose(instruction.m_Rd) = *result;
+                    }
+                    else {
+                        traceLog<tr::Tracer::CriticalLvls::ERROR, std::runtime_error>("Invalid memory access.");
+                    }
+                    break;
+                }
+                case STR:
+                {
+                    if (
+                        auto result = m_memory.write(m_register.getGeneralPurpose(instruction.m_Rd), addr_val);
+                        !result
+                        )
+                    {
+                        traceLog<tr::Tracer::CriticalLvls::ERROR, std::runtime_error>("Invalid memory access.");
+                    }
+                    break;
+                }
+                case PUSH:
+                {
+                    if (!Core::checkAddressInrange(addr_val, m_segment.at(SS)))
+                    {
+                        traceLog<tr::Tracer::CriticalLvls::ERROR, std::runtime_error>("Stack-overflow :)");
+                    }
+                    m_memory.write(m_register.getGeneralPurpose(instruction.m_Rd), addr_val);
+                    m_register.getGeneralPurpose(SP) = addr_val;
+                    break;
+                }
+                case POP:
+                {
+                    if (!Core::checkAddressInrange(addr_val - 1, m_segment.at(SS))) {
+                        return;
+                    }
+                    if (
+                        auto result = m_memory.read(m_register.getGeneralPurpose(SP));
+                        result.has_value()
+                        )
+                    {
+                        m_register.getGeneralPurpose(instruction.m_Rd) = *result;
+                        m_register.getGeneralPurpose(SP) = addr_val;
+                    }
+                    else {
+                        traceLog<tr::Tracer::CriticalLvls::ERROR, std::runtime_error>("Invalid memory access.");
+                    }
+                    break;
+                }
+                default: 
+                {
+                    m_register.getGeneralPurpose(instruction.m_Rd) = addr_val;
+                    break;
+                }
+            }
+        }
 
     private:
         memory_type   m_memory{};
         register_type m_register{};
         segment_type  m_segment{};
+
+        tr::Tracer*   m_tracer;
     };
 }
-
-
-private:
-    memory		memory_{};
-    registers	registers_{};
-
-    // The memory or registers are not aware of memory segmentation
-    segment		segments_{};
-
-    // The tracer pointer is used to record CPU state information
-    Tracer* tracer_;
-};
-
-
-
-    template <typename SG>
-        requires std::same_as<segment, std::remove_reference_t<SG>>
-    constexpr auto init(SG&& seg_config) noexcept -> bool {
-        // check if the config contains all needed field
-        constexpr std::array<SEGReg, 4> seg_regs{ CS, DS, SS, ES };
-        if (!std::ranges::all_of(seg_regs, [&seg_config](SEGReg sr) -> bool {return seg_config.contains(sr); })) {
-            return false;
-        }
-        // segment overlap is not allowed!
-        auto overlap = []<typename T>(const std::pair<T, T>&r1, decltype(r1) r2) -> bool {
-            return r1.first <= r2.second && r2.first <= r1.second;
-        };
-        using value_type = typename segment::mapped_type;
-        std::vector<value_type> rngs{};
-        rngs.reserve(4);
-        for (auto&& r : seg_config) {
-            rngs.emplace_back(r.second);
-        }
-        // check if the start and end addr for each segment is in the range
-        if (!std::ranges::all_of(rngs, [this](const value_type& p) -> bool {
-            return p.second >= p.first && (p.second >= 0 && p.second < Core::mem_size); })
-            ) {
-            return false;
-        }
-        // sort by starting index
-        std::ranges::sort(rngs, std::ranges::less{}, [](const value_type& r) {return r.first; });
-        for (auto it = rngs.cbegin() + 1; it != rngs.cend(); ++it) {
-            if (overlap(*(it - 1), *it)) {
-                return false;
-            }
-        }
-        // total segments size should be <= mem_size
-        if (sysb res = std::accumulate(rngs.begin(), rngs.end(), 0,
-            [](sysb&& i, const value_type& p) {return i + (p.second - p.first) + 1; });
-            res > mem_size) {
-            return false;
-        }
-        segments_ = std::forward<SG>(seg_config);
-        // configure SP register to the highest addr in the seg
-        registers_.GP(SP) = segments_.at(SS).second + 1;
-        // configure PC register to the lowest addr in the seg
-        registers_.GP(PC) = segments_.at(CS).first;
-        return true;
-    }
-
-    // This ctor overload is used when no tracer is provided
-    template <typename SG> requires std::same_as<segment, std::remove_reference_t<SG>>
-    [[nodiscard]] constexpr explicit Core(SG&& seg_config)
-        : tracer_{ nullptr } {
-        if (!this->init(std::forward<SG>(seg_config))) {
-            trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-                "Error: Failed to initialize segments!");
-        }
-    }
-
-    // This ctor overload is used when tracer is provided
-    template <typename SG> requires std::same_as<segment, std::remove_reference_t<SG>>
-    [[nodiscard]] constexpr explicit Core(
-        SG&& seg_config,
-        Tracer* tracer
-    ) : tracer_{ tracer } {
-        if (!this->init(std::forward<SG>(seg_config))) {
-            trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-                "Error: Failed to initialize segments!");
-        }
-    }
-
-    // Instruction loader
-    template <typename T, typename... Ts> requires is_valid_data<sysb, T, Ts...>
-    constexpr auto load_instr(T in, Ts... ins) noexcept -> void {
-        r_load(segments_.at(CS).first, segments_.at(CS).second, in, ins...);
-    }
-    // Data loader
-    template <typename T, typename... Ts> requires is_valid_data<sysb, T, Ts...>
-    constexpr auto load_data(T in, Ts... ins) noexcept -> void {
-        r_load(segments_.at(DS).first, segments_.at(DS).second, in, ins...);
-    }
-
-    // Core function
-    constexpr auto run() -> void {
-        for (;;) {
-            auto bin = fetch();
-            // terminate condition
-            if (bit_test_all(bin)) {
-                break;
-            }
-            instruct inst = decoder::decode(bin);
-            // treat jumps
-            if (check_jump(inst)) {
-                generate_trace(bin, inst);
-                continue;
-            }
-            auto result = execute(inst);
-            mem_access(inst, result);
-            generate_trace(bin, inst);
-        }
-    }
-
-private:
-    // log message and error reporting
-    template <Tracer::LogCriticalLvls lvl, std::derived_from<std::exception> Except>
-    constexpr auto trace_log(const std::string_view& msg) const -> void {
-        if (tracer_ != nullptr) {
-            tracer_->log<lvl, Except>(msg);
-            return;
-        }
-        if (lvl == Tracer::LogCriticalLvls::ERROR) {
-            throw Except(msg.data());
-        }
-    }
-
-    // create trace log
-    constexpr auto generate_trace(sysb bin, instruct& inst) noexcept -> void {
-        if (tracer_ != nullptr) {
-            tracer_->generate_trace<
-                sysb, instruct, memory, registers, segment
-            >(bin, inst, memory_, registers_, segments_);
-        }
-    }
-
-    // fetch unit
-    [[nodiscard]] constexpr auto fetch() -> sysb {
-        if (!Core::in_range<sysb>(registers_.GP(PC), segments_.at(CS))) {
-            trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-                "Error: PC exceeds CS boundary!");
-        }
-        if (auto instr = memory_.read_slot(registers_.GP(PC)); instr.has_value()) {
-            ++registers_.GP(PC);
-            return instr.value();
-        }
-        trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-            "Error: Failed to read instruction from memory!");
-        // dummy return value to silent compiler warning
-        return 0;
-    }
-
-    // execute unit
-    [[nodiscard]] constexpr auto execute(const instruct& instr) -> typename alu_out::op_size {
-        alu_out out = alu::exec<typename alu_in::op_size>(gen_ALUIn(instr));
-        update_psr(out.Flags_);
-        return out.Res_;
-    }
-
-    // memory access and write back
-    constexpr auto mem_access(const instruct& instr, sysb v) -> void {
-        switch (instr.code_) {
-            // only LDR, STR, PUSH, and POP will access memory;
-        case LDR: {
-            if (auto m = memory_.read_slot(v); m.has_value()) {
-                registers_.GP(instr.Rd_) = m.value();
-            }
-            else {
-                trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-                    "Error: Invalid memory access!");
-            }
-            break;
-        }
-        case STR: {
-            if (!memory_.write_slot(registers_.GP(instr.Rd_), v)) {
-                trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-                    "Error: Invalid memory access!");
-            }
-            break;
-        }
-        case PUSH: {
-            if (!Core::in_range(v, segments_.at(SS))) {
-                trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>("Error: Stackoverflow!");
-            }
-            memory_.write_slot(registers_.GP(instr.Rd_), v);
-            registers_.GP(SP) = v;
-            break;
-        }
-        case POP: {
-            if (!Core::in_range(v - 1, segments_.at(SS))) {
-                return;
-            }
-            if (auto m = memory_.read_slot(registers_.GP(SP)); m.has_value()) {
-                registers_.GP(instr.Rd_) = m.value();
-                registers_.GP(SP) = v;
-            }
-            else {
-                trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>("Error: Invalid memory access!");
-            }
-            break;
-        }
-                // for other instructions, "v" is the result that needs to be write back to Rd
-        default: {
-            registers_.GP(instr.Rd_) = v;
-            break;
-        }
-        }
-    }
-
-    // check jump condition before ALU
-    // if is jump instruction, then return true, else return false
-    constexpr auto check_jump(const instruct& ins) -> bool {
-        if (ins.type_ != J_t) {
-            return false;
-        }
-        // lambda function to perform jump
-        auto perform_jump = [this](bool cond, typename registers::gp_width dst)
-            noexcept -> void {
-            if (cond) {
-                registers_.GP(PC) = dst;
-            }
-            };
-        switch (ins.code_) {
-        case JMP:	perform_jump(true, ins.imm_);		break;
-        case JZ:	perform_jump(registers_.PSR(Z), ins.imm_);		break;
-        case JN:	perform_jump(registers_.PSR(N), ins.imm_);		break;
-        case JC:	perform_jump(registers_.PSR(C), ins.imm_);		break;
-        case JV:	perform_jump(registers_.PSR(V), ins.imm_);		break;
-        case JZN:	perform_jump(registers_.PSR(Z) ||
-            registers_.PSR(N), ins.imm_);		break;
-        case SYSCALL: {
-            try {
-                syscall::template syscall_table_<Core::memory, Core::registers>.at(
-                    static_cast<std::uint32_t>(ins.imm_))
-                    (this->memory_, this->registers_);
-            }
-            catch (const std::out_of_range&) {
-                trace_log<Tracer::LogCriticalLvls::ERROR, std::out_of_range>(
-                    "Error: Unrecoganized SYSCALL number!");
-            }
-            break;
-        }
-        default:
-            trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-                "Error: Unrecoganized instruction type detected!");
-            break;
-        }
-        return true;
-    }
-
-    // generate alu_in based on the instruction
-    constexpr auto gen_ALUIn(const instruct& ins) const -> alu_in {
-        // J-type instruction should not go through
-        if (ins.type_ == J_t) {
-            trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>("Error: Jump-type instruction fall through!");
-        }
-        // lambda function to help create ALU input for R & I type instruction
-        auto make_ALUIn_RI = [this](const instruct& ins, ALU_OpCode op) -> alu_in {
-            switch (ins.type_) {
-            case R_t:	return make_ALUIn<sysb>(op, registers_.GP(ins.Rm_), registers_.GP(ins.Rn_));
-            case I_t:	return make_ALUIn<sysb>(op, registers_.GP(ins.Rm_), ins.imm_);
-            default:	trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-                "Error: Unrecoganized instruction type detected!");
-            }
-            // dummy return value to silent compiler warning
-            return alu_in{};
-            };
-        switch (ins.code_) {
-            // Arithmetic Ops
-        case ADD:		return make_ALUIn_RI(ins, ALU_OpCode::ADD);
-        case UMUL:		return make_ALUIn_RI(ins, ALU_OpCode::UMUL);
-        case UDIV:		return make_ALUIn_RI(ins, ALU_OpCode::UDIV);
-        case UMOL:		return make_ALUIn_RI(ins, ALU_OpCode::UMOL);
-            // Binary Logical Ops
-        case AND:		return make_ALUIn_RI(ins, ALU_OpCode::AND);
-        case ORR:		return make_ALUIn_RI(ins, ALU_OpCode::ORR);
-        case XOR:		return make_ALUIn_RI(ins, ALU_OpCode::XOR);
-        case SHL:		return make_ALUIn_RI(ins, ALU_OpCode::SHL);
-        case SHR:		return make_ALUIn_RI(ins, ALU_OpCode::SHR);
-        case RTL:		return make_ALUIn_RI(ins, ALU_OpCode::RTL);
-        case RTR:		return make_ALUIn_RI(ins, ALU_OpCode::RTR);
-            // Uniary Logical Ops
-            // for uniary operations, only the first operand is used, second is discarded (0x0)
-        case NOT:		return make_ALUIn<sysb>(ALU_OpCode::COMP, registers_.GP(ins.Rm_), 0x0);
-            // Load and Store Ops
-        case LDR:		return make_ALUIn<sysb>(ALU_OpCode::PASS, registers_.GP(ins.Rm_), 0x0);
-        case STR:		return make_ALUIn<sysb>(ALU_OpCode::PASS, registers_.GP(ins.Rm_), 0x0);
-            // Stack Ops
-        case PUSH:		return make_ALUIn<sysb>(ALU_OpCode::ADD, registers_.GP(SP), -1);
-        case POP:		return make_ALUIn<sysb>(ALU_OpCode::ADD, registers_.GP(SP), 1);
-        default:		trace_log<Tracer::LogCriticalLvls::ERROR, std::runtime_error>(
-            "Error: Unrecoganized instruction type detected!");
-        }
-        // dummy return value to silent compiler warning
-        return alu_in{};
-    }
-
-    // helper function to create ALU_in
-    template <std::convertible_to<typename alu_in::op_size> T>
-    inline static constexpr auto make_ALUIn(ALU_OpCode alu_op, T op1, T op2) noexcept
-        -> alu_in {
-        return alu_in{
-            alu_op,
-            {op1, op2}
-        };
-    }
-
-    // set psr flags
-    constexpr auto update_psr(const typename alu_out::flag_type& flags) noexcept -> void {
-        // Note: alu_out::flag_type == unordered_set<std::uint8_t>;
-        registers_.clear_psr();
-        for (auto&& F : flags) {
-            registers_.PSR(F, true);
-        }
-    }
-
-    // I-loader & D-loader helper
-    template <typename T, typename... Ts>
-    constexpr auto r_load(std::size_t idx, std::size_t lim, T x, Ts... xs) noexcept -> void {
-        if (idx > lim) {
-            return;
-        }
-        memory_.write_slot(static_cast<sysb>(x), idx);
-        if constexpr (sizeof...(Ts) > 0) {
-            r_load(idx + 1, lim, xs...);
-        }
-    }
-
-    // validate addr with segment size
-    template <std::unsigned_integral T>
-    [[nodiscard]] inline static constexpr auto in_range(T p, const std::pair<T, T>& seg) noexcept -> bool {
-        return p >= seg.first && p <= seg.second;
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
