@@ -829,9 +829,9 @@ namespace scsp::ALU
         {
             using ::scsp::freefuncs::flipBit;
             std::expected<void, std::domain_error> result = flipBit(A);
-            return (result) ?
-                    makeOutput<T>(A) :
-                    ALUOutput<T>{};
+
+            return (result) ? makeOutput<T>(A) :
+                              ALUOutput<T>{}   ;
         }
 
         // 10. SHL
