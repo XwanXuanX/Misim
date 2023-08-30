@@ -1614,9 +1614,11 @@ namespace scsp::core
                 return false;
             }
 
-            std::ranges::sort(ranges,
-                              std::ranges::less{},
-                              [](const Core::SegmentRange rng) { return rng.m_start; });
+            std::ranges::sort(
+                ranges,
+                std::ranges::less{},
+                [](const Core::SegmentRange rng) { return rng.m_start; }
+            );
 
             auto checkOverlap = [](const Core::SegmentRange rng1, const Core::SegmentRange rng2)
                 -> bool
@@ -1630,11 +1632,13 @@ namespace scsp::core
                 }
             }
 
+            auto acc = [](system_bit_type&& i, const Core::SegmentRange rng)
+                -> system_bit_type
+            {
+                return i + (rng.m_end - rng.m_start) + 1;
+            };
             if (
-                system_bit_type result = std::accumulate(ranges.begin(), ranges.end(), 0,
-                                                         [](system_bit_type&& i, const Core::SegmentRange rng) {
-                                                             return i + (rng.m_end - rng.m_start) + 1;
-                                                         });
+                system_bit_type result = std::accumulate(ranges.begin(), ranges.end(), 0, acc);
                 result > memory_size
                 )
             {
@@ -1670,9 +1674,9 @@ namespace scsp::core
         {
             if (m_tracer != nullptr)
             {
-                m_tracer->generateTrace<system_bit_type ,
-                                        instruction_type, memory_type,
-                                        register_type   , segment_type>(binary, instruction, m_memory, m_register, m_segment);
+                m_tracer->generateTrace<system_bit_type, instruction_type, memory_type, register_type, segment_type>(
+                    binary, instruction, m_memory, m_register, m_segment
+                );
             }
         }
 
