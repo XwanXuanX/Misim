@@ -47,7 +47,6 @@ namespace scsp::memory
         using memory_size_type  = std::size_t;
         using memory_model_type = std::array<memory_width_type, Size>;
 
-    public:
         const memory_size_type m_memory_size  = Size;
         const memory_size_type m_memory_width = sizeof(memory_width_type) * CHAR_BIT;
 
@@ -72,6 +71,7 @@ namespace scsp::memory
                     std::domain_error("Address out of range.")
                 );
             }
+
             m_memory[address] = std::move(data);
             return {};
         }
@@ -85,6 +85,7 @@ namespace scsp::memory
                     std::domain_error("Address out of range.")
                 );
             }
+
             return m_memory.at(address);
         }
 
@@ -141,11 +142,13 @@ namespace scsp::freefuncs
     auto testBit(const uint n, const std::size_t position) noexcept
         -> std::expected<bool, std::domain_error>
     {
-        if (!freefuncs::checkBitInrange(n, position)) {
+        if (!freefuncs::checkBitInrange(n, position))
+        {
             return std::unexpected(
                 std::domain_error("Bit position out of bound.")
             );
         }
+
         return n & (static_cast<uint>(1) << position);
     }
 
@@ -155,7 +158,8 @@ namespace scsp::freefuncs
     {
         const std::size_t n_size = sizeof(n) * CHAR_BIT - 1;
 
-        if (sizeof(n) == sizeof(std::uintmax_t)) {
+        if (sizeof(n) == sizeof(std::uintmax_t))
+        {
             using return_t = std::expected<bool, std::domain_error>;
             if (
                 const return_t result = freefuncs::testBit(n, n_size);
@@ -164,7 +168,8 @@ namespace scsp::freefuncs
             {
                 return false;
             }
-            else if (!result) {
+            else if (!result)
+            {
                 return result;
             }
         }
@@ -176,12 +181,14 @@ namespace scsp::freefuncs
     auto testBitAll(const std::unsigned_integral auto n, const std::size_t last_nbit) noexcept
         -> std::expected<bool, std::domain_error>
     {
-        if (!freefuncs::checkBitInrange(n, last_nbit)) {
+        if (!freefuncs::checkBitInrange(n, last_nbit))
+        {
             return std::unexpected(
                 std::domain_error("Last nbits out of bound.")
             );
         }
-        if (!freefuncs::checkBitInrange(n, last_nbit + 1)) {
+        if (!freefuncs::checkBitInrange(n, last_nbit + 1))
+        {
             return freefuncs::testBitAll(n);
         }
         const auto mask = (static_cast<std::uintmax_t>(1) << (last_nbit + 1)) - 1;
@@ -199,12 +206,14 @@ namespace scsp::freefuncs
     auto testBitAny(const std::unsigned_integral auto n, const std::size_t last_nbit) noexcept
         -> std::expected<bool, std::domain_error>
     {
-        if (!freefuncs::checkBitInrange(n, last_nbit)) {
+        if (!freefuncs::checkBitInrange(n, last_nbit))
+        {
             return std::unexpected(
                 std::domain_error("Last nbits out of bound.")
             );
         }
-        if (!freefuncs::checkBitInrange(n, last_nbit + 1)) {
+        if (!freefuncs::checkBitInrange(n, last_nbit + 1))
+        {
             return freefuncs::testBitAny(n);
         }
         const auto mask = (static_cast<std::uintmax_t>(1) << (last_nbit + 1)) - 1;
@@ -239,11 +248,13 @@ namespace scsp::freefuncs
     auto setBit(uint& n, const std::size_t position) noexcept
         -> std::expected<void, std::domain_error>
     {
-        if (!freefuncs::checkBitInrange<uint>(position)) {
+        if (!freefuncs::checkBitInrange<uint>(position))
+        {
             return std::unexpected(
                 std::domain_error("Bit position out of bound.")
             );
         }
+
         n |= (static_cast<uint>(1) << position);
         return {};
     }
@@ -279,7 +290,8 @@ namespace scsp::freefuncs
         }
 
         return_t result;
-        if constexpr (sizeof...(positions) > 0) {
+        if constexpr (sizeof...(positions) > 0)
+        {
             result = freefuncs::setBit(n, positions...);
         }
         return result;
@@ -289,11 +301,13 @@ namespace scsp::freefuncs
     auto resetBit(uint& n, const std::size_t position) noexcept
         -> std::expected<void, std::domain_error>
     {
-        if (!freefuncs::checkBitInrange<uint>(position)) {
+        if (!freefuncs::checkBitInrange<uint>(position)) 
+        {
             return std::unexpected(
                 std::domain_error("Bit position out of bound.")
             );
         }
+
         using return_t = std::expected<bool, std::domain_error>;
         if (
             const return_t result = freefuncs::testBit<uint>(n, position);
@@ -304,9 +318,11 @@ namespace scsp::freefuncs
                 std::domain_error("freefunc::TestBit function failed.")
             );
         }
-        else if (!*result) {
+        else if (!*result) 
+        {
             return {};
         }
+
         n ^= (static_cast<uint>(1) << position);
         return {};
     }
@@ -335,7 +351,8 @@ namespace scsp::freefuncs
         }
 
         return_t result;
-        if constexpr (sizeof...(positions) > 0) {
+        if constexpr (sizeof...(positions) > 0)
+        {
             result = freefuncs::resetBit(n, positions...);
         }
         return result;
@@ -352,11 +369,13 @@ namespace scsp::freefuncs
     auto flipBit(uint& n, const std::size_t position) noexcept
         -> std::expected<void, std::domain_error>
     {
-        if (!freefuncs::checkBitInrange<uint>(position)) {
+        if (!freefuncs::checkBitInrange<uint>(position))
+        {
             return std::unexpected(
                 std::domain_error("Bit position out of bound.")
             );
         }
+
         n ^= (static_cast<uint>(1) << position);
         return {};
     }
@@ -385,7 +404,8 @@ namespace scsp::freefuncs
         }
 
         return_t result;
-        if constexpr (sizeof...(positions) > 0) {
+        if constexpr (sizeof...(positions) > 0)
+        {
             result = freefuncs::flipBit(n, positions...);
         }
         return result;
@@ -428,7 +448,8 @@ namespace scsp::freefuncs
 
 namespace scsp::register_file
 {
-    enum GPReg : std::uint8_t {
+    enum GPReg : std::uint8_t
+    {
         R0 = 0, //  \ 
         R1,     //   |
         R2,     //   |
@@ -448,14 +469,16 @@ namespace scsp::register_file
         PC      //      Program Counter
     };
 
-    enum SEGReg : std::uint8_t {
+    enum SEGReg : std::uint8_t
+    {
         CS,		//      Code Segment
         DS,		//      Data Segment
         SS,		//      Stack Segment
         ES		//      Extra Segment
     };
 
-    enum PSRReg : std::uint8_t {
+    enum PSRReg : std::uint8_t
+    {
         N,	    //      Negative or less than flag
         Z,	    //      Zero flag
         C,	    //      Carry/borrow flag
@@ -495,7 +518,7 @@ namespace scsp::register_file
             -> bool
         {
             namespace ff = ::scsp::freefuncs;
-            return ff::testBit<PSR_width_type>(m_psr, flag_name);
+            return ff::testBit<PSR_width_type>(m_psr, flag_name).value();
         }
 
         constexpr
@@ -503,10 +526,11 @@ namespace scsp::register_file
             -> std::expected<bool, std::runtime_error>
         {
             namespace ff = ::scsp::freefuncs;
-            std::expected<void, std::domain_error> result =
-                (value) ? ff::setBit  <PSR_width_type>(m_psr, flag_name) :
-                          ff::resetBit<PSR_width_type>(m_psr, flag_name);
-            if (!result) {
+
+            std::expected<void, std::domain_error> result = (value) ? ff::setBit  <PSR_width_type>(m_psr, flag_name) :
+                                                                      ff::resetBit<PSR_width_type>(m_psr, flag_name) ;
+            if (!result)
+            {
                 return std::unexpected(
                     std::runtime_error("setBit / resetBit failed")
                 );
@@ -601,27 +625,28 @@ namespace scsp::ALU
         auto execute(ALUInput<Width> alu_input) noexcept
             -> ALUOutput<Width>
         {
-            using operand_width_type = typename ALUInput<Width>::operand_width_type;
-            std::pair<operand_width_type, operand_width_type> AB = alu_input.m_operands;
             using enum ::scsp::ALU::ALUOpCode;
+            using operand_width_type = typename ALUInput<Width>::operand_width_type;
+
+            std::pair<operand_width_type, operand_width_type> AB = alu_input.m_operands;
 
             switch (alu_input.m_opcode)
             {
-                case ADD :  return add (AB.first, AB.second);
-                case UMUL:  return umul(AB.first, AB.second);
-                case UDIV:  return udiv(AB.first, AB.second);
-                case UMOL:  return umol(AB.first, AB.second);
-                case PASS:  return pass(AB.first           );
+                case ADD :  { return add (AB.first, AB.second); }
+                case UMUL:  { return umul(AB.first, AB.second); }
+                case UDIV:  { return udiv(AB.first, AB.second); }
+                case UMOL:  { return umol(AB.first, AB.second); }
+                case PASS:  { return pass(AB.first           ); }
 
-                case AND :  return and_(AB.first, AB.second);
-                case ORR :  return orr (AB.first, AB.second);
-                case XOR :  return xor_(AB.first, AB.second);
-                case COMP:  return comp(AB.first           );
+                case AND :  { return and_(AB.first, AB.second); }
+                case ORR :  { return orr (AB.first, AB.second); }
+                case XOR :  { return xor_(AB.first, AB.second); }
+                case COMP:  { return comp(AB.first           ); }
 
-                case SHL :  return shl (AB.first, AB.second);
-                case SHR :  return shr (AB.first, AB.second);
-                case RTL :  return rtl (AB.first, AB.second);
-                case RTR :  return rtr (AB.first, AB.second);
+                case SHL :  { return shl (AB.first, AB.second); }
+                case SHR :  { return shr (AB.first, AB.second); }
+                case RTL :  { return rtl (AB.first, AB.second); }
+                case RTR :  { return rtr (AB.first, AB.second); }
             }
 
             return ALUOutput<Width>{};
@@ -636,11 +661,14 @@ namespace scsp::ALU
             // if the first bit (sign bit) is set, then set Neg flag;
             namespace ff = ::scsp::freefuncs;
             using enum ::scsp::register_file::PSRReg;
-            if (ff::testBit<T>(R, sizeof(T) * CHAR_BIT - 1)) {
+
+            if (ff::testBit<T>(R, sizeof(T) * CHAR_BIT - 1).value())
+            {
                 flags.insert(N);
             }
             // if the result is equal to 0, then set Zero flag;
-            if (ff::testBitNone(R) && R == 0x0) {
+            if (ff::testBitNone(R) && R == 0x0) 
+            {
                 flags.insert(Z);
             }
         }
@@ -661,13 +689,17 @@ namespace scsp::ALU
             -> std::unordered_set<std::uint8_t>
         {
             using enum ::scsp::register_file::PSRReg;
+
             std::unordered_set<std::uint8_t> flags{};
-            if (checkCarry(A, B, R)) {
+            if (checkCarry(A, B, R)) 
+            {
                 flags.insert(C);
             }
-            if (checkOverflow(A, B, R)) {
+            if (checkOverflow(A, B, R)) 
+            {
                 flags.insert(V);
             }
+
             // Neg and Zero delegate to other overload
             getProgramStatusFlags<T>(R, flags);
             return flags;
@@ -702,11 +734,11 @@ namespace scsp::ALU
                 std::size_t msb = sizeof(T) * CHAR_BIT - 1;
                 namespace ff = ::scsp::freefuncs;
                 // if A & B's msb differ, no overflow
-                if (ff::testBit<T>(A, msb) ^ ff::testBit<T>(B, msb)) {
+                if (ff::testBit<T>(A, msb).value() ^ ff::testBit<T>(B, msb).value()) {
                     return false;
                 }
                 // check if A | B's msb differ from R's msb
-                return (ff::testBit<T>(A, msb) ^ ff::testBit<T>(R, msb)) ? true : false;
+                return (ff::testBit<T>(A, msb).value() ^ ff::testBit<T>(R, msb).value()) ? true : false;
             };
 
             using flag_type = std::unordered_set<std::uint8_t>;
@@ -738,6 +770,7 @@ namespace scsp::ALU
             -> ALUOutput<T>
         {
             using ::scsp::freefuncs::testBitNone;
+
             if (testBitNone(B) && B == 0x0) {
                 return ALUOutput<T>{};
             }
@@ -750,6 +783,7 @@ namespace scsp::ALU
             -> ALUOutput<T>
         {
             using ::scsp::freefuncs::testBitNone;
+
             if (testBitNone(B) && B == 0x0) {
                 return ALUOutput<T>{};
             }
@@ -998,10 +1032,12 @@ namespace scsp::decode
             -> T
         {
             using ::scsp::freefuncs::setBit;
+
             T mask = 0x0;
             setBit<T>(mask);
 
-            if (mask_length > sizeof(T) * CHAR_BIT) {
+            if (mask_length > sizeof(T) * CHAR_BIT)
+            {
                 return mask;
             }
             return mask >> (sizeof(T) * CHAR_BIT - mask_length);
@@ -1068,7 +1104,8 @@ namespace scsp::syscall
             std::string temp{};
             temp.reserve(registers.getGeneralPurpose(R1));
 
-            for (auto i = registers.getGeneralPurpose(R0);
+            for (
+                 auto i = registers.getGeneralPurpose(R0);
                  i < (registers.getGeneralPurpose(R0) + registers.getGeneralPurpose(R1));
                  ++i
                 )
@@ -1076,7 +1113,8 @@ namespace scsp::syscall
                 if (
                     auto result = memory.read(i);
                     result
-                ) {
+                    )
+                {
                     temp.push_back(*result);
                 }
                 else {
@@ -1105,6 +1143,7 @@ namespace scsp::syscall
 
             std::string temp;
             std::getline(std::cin, temp);
+
             if (temp.length() > registers.getGeneralPurpose(R1))
             {
                 throw std::length_error("User-input string exceeds maximum space length.");
@@ -1112,9 +1151,7 @@ namespace scsp::syscall
 
             std::ranges::for_each(
                 temp,
-                [i = registers.getGeneralPurpose(R0), &memory](auto character) mutable noexcept
-                    -> void
-                {
+                [i = registers.getGeneralPurpose(R0), &memory](auto character) mutable noexcept {
                     memory.write(character, i);
                     ++i;
                 }
@@ -1161,45 +1198,45 @@ namespace scsp::tracer
             using opt_translation_type = const std::unordered_map<::scsp::decode::OpType,        std::string_view>;
 
             static inline gp_translation_type gp_translation = {
-                {R0, "R0"  },   {R1, "R1"},   {R2, "R2"  },   {R3, "R3"  },
-                {R4, "R4"  },   {R5, "R5"},   {R6, "R6"  },   {R7, "R7"  },
-                {R8, "R8"  },   {R9, "R9"},   {R10, "R10"},   {R11, "R11"},
-                {R12, "R12"},   {SP, "SP"},   {LR, "LR"  },   {PC, "PC"  }
+                { R0, "R0"   },   { R1, "R1" },   { R2, "R2"   },   { R3, "R3"   },
+                { R4, "R4"   },   { R5, "R5" },   { R6, "R6"   },   { R7, "R7"   },
+                { R8, "R8"   },   { R9, "R9" },   { R10, "R10" },   { R11, "R11" },
+                { R12, "R12" },   { SP, "SP" },   { LR, "LR"   },   { PC, "PC"   }
             };
 
             static inline psr_translation_type psr_translation = {
-                {N, 'N'},
-                {Z, 'Z'},
-                {C, 'C'},
-                {V, 'V'}
+                { N, 'N' },
+                { Z, 'Z' },
+                { C, 'C' },
+                { V, 'V' }
             };
 
             static inline seg_translation_type seg_translation = {
-                {CS, "Code Segment" },
-                {DS, "Data Segment" },
-                {SS, "Stack Segment"},
-                {ES, "Extra Segment"}
+                { CS, "Code Segment"  },
+                { DS, "Data Segment"  },
+                { SS, "Stack Segment" },
+                { ES, "Extra Segment" }
             };
 
             static inline opt_translation_type opt_translation = {
-                {Rt, "R type"},
-                {It, "I type"},
-                {Ut, "U type"},
-                {St, "S type"},
-                {Jt, "J type"}
+                { Rt, "R type" },
+                { It, "I type" },
+                { Ut, "U type" },
+                { St, "S type" },
+                { Jt, "J type" }
             };
 
             static inline opc_translation_type opc_translation = {
-                {ADD, "ADD"}, {UMUL, "UMUL"}, {UDIV, "UDIV"}, {UMOL, "UMOL"},
+                { ADD, "ADD" }, { UMUL, "UMUL" }, { UDIV, "UDIV" }, { UMOL, "UMOL" },
 
-                {AND, "AND"}, {ORR, "ORR"}, {XOR, "XOR"}, {SHL, "SHL"},
-                {SHR, "SHR"}, {RTL, "RTL"}, {RTR, "RTR"}, {NOT, "NOT"},
+                { AND, "AND" }, { ORR, "ORR" }, { XOR, "XOR" }, { SHL, "SHL" },
+                { SHR, "SHR" }, { RTL, "RTL" }, { RTR, "RTR" }, { NOT, "NOT" },
 
-                {LDR, "LDR"}, {STR, "STR"}, {PUSH, "PUSH"}, {POP, "POP"},
+                { LDR, "LDR" }, { STR, "STR" }, { PUSH, "PUSH" }, { POP, "POP" },
 
-                {JMP, "JMP"}, {JZ, "JZ"}, {JN, "JN"}, {JC, "JC"}, {JV, "JV"}, {JZN, "JZN"},
+                { JMP, "JMP" }, { JZ, "JZ" }, { JN, "JN" }, { JC, "JC" }, { JV, "JV" }, { JZN, "JZN" },
 
-                {SYSCALL, "SYSCALL"}
+                { SYSCALL, "SYSCALL" }
             };
         };
 
@@ -1223,21 +1260,20 @@ namespace scsp::tracer
         auto log(const std::string_view& message)
             -> void
         {
-            m_log_file << [](Tracer::CriticalLvls level)
-                              -> std::string_view
-                          {
-                              using enum ::scsp::tracer::Tracer::CriticalLvls;
-                              switch (level)
-                              {
-                                  case INFO:      return "INFO: "   ;
-                                  case WARNING:   return "WARNING: ";
-                                  case ERROR:     return"ERROR: "   ;
-                                  default:        throw std::runtime_error("Unknown critical level.");
-                              }
-                          } (Level);
+            auto getPrefix = [](Tracer::CriticalLvls level)
+                -> std::string_view
+            {
+                using enum ::scsp::tracer::Tracer::CriticalLvls;
+                switch (level)
+                {
+                    case INFO:      return "INFO: "   ;
+                    case WARNING:   return "WARNING: ";
+                    case ERROR:     return "ERROR: "  ;
+                    default:        throw std::runtime_error("Unknown critical level.");
+                }
+            };
 
-            m_log_file << message
-                       << '\n';
+            m_log_file << getPrefix(Level) << message << '\n';
 
             if (Level == Tracer::CriticalLvls::ERROR)
             {
@@ -1251,7 +1287,7 @@ namespace scsp::tracer
                   typename Register   , typename Segment>
         auto generateTrace(const T binary,
                            const_lref_type<Instruction> instruction, const_lref_type<Memory>  memory,
-                           const_lref_type<Register>    registers,   const_lref_type<Segment> segments) noexcept
+                           const_lref_type<Register>    registers  , const_lref_type<Segment> segments) noexcept
             -> void
         {
             m_log_file << getHeading(binary)
@@ -1292,7 +1328,7 @@ namespace scsp::tracer
             return ss_label.str();
         }
 
-        template <typename Memory, typename Segment> static
+        template <typename Memory, typename Segment>
         auto getMemory(const_lref_type<Memory> memory, const_lref_type<Segment> segments)
             -> std::string
         {
@@ -1301,13 +1337,13 @@ namespace scsp::tracer
 
             for (const auto& p : segments)
             {
-                try {
+                try
+                {
                     ss_segments << Labels::seg_translation.at(static_cast<::scsp::register_file::SEGReg>(p.first));
                 }
-                catch (const std::out_of_range&) {
-                    Tracer::log<CriticalLvls::ERROR, std::out_of_range>(
-                        "No corresponding segment translation."
-                    );
+                catch (const std::out_of_range&)
+                {
+                    log<CriticalLvls::ERROR, std::out_of_range>("No corresponding segment translation.");
                 }
 
                 for (auto i = p.second.m_start; i <= p.second.m_end; ++i) {
@@ -1320,7 +1356,7 @@ namespace scsp::tracer
             return ss_segments.str();
         }
 
-        template <typename Instruction> static
+        template <typename Instruction>
         auto getInstruction(const_lref_type<Instruction> instruction)
             -> std::string
         {
@@ -1328,43 +1364,31 @@ namespace scsp::tracer
             std::stringstream ss_value{};
 
             constexpr std::array<std::string_view, 6> labels{
-                "OpType", "OpCode",
-                "Rd", "Rm", "Rn", 
-                "Imm"
+                "OpType", "OpCode", "Rd", "Rm", "Rn", "Imm"
             };
-            const std::array<typename Instruction::register_type, 3> registers{
-                instruction.m_Rd,
-                instruction.m_Rm,
-                instruction.m_Rn,
-            };
-
             std::ranges::for_each(
                 labels,
-                [&ss_label](const auto v) {
-                    ss_label << v << ',';
-                }
+                [&ss_label](const auto v) { ss_label << v << ','; }
             );
             ss_label << '\n';
 
+            const std::array<typename Instruction::register_type, 3> registers{
+                instruction.m_Rd, instruction.m_Rm, instruction.m_Rn
+            };
             try
             {
-                ss_value << Labels::opt_translation.at(static_cast<::scsp::decode::OpType>(instruction.m_type))
-                         << ',';
-                ss_value << Labels::opc_translation.at(static_cast<::scsp::decode::OpCode>(instruction.m_code))
-                         << ',';
+                ss_value << Labels::opt_translation.at(static_cast<::scsp::decode::OpType>(instruction.m_type)) << ',';
+                ss_value << Labels::opc_translation.at(static_cast<::scsp::decode::OpCode>(instruction.m_code)) << ',';
                 std::ranges::for_each(
                     registers,
                     [&ss_value](const auto v) {
-                        ss_value << Labels::gp_translation.at(static_cast<::scsp::register_file::GPReg>(v))
-                                 << ',';
+                        ss_value << Labels::gp_translation.at(static_cast<::scsp::register_file::GPReg>(v)) << ',';
                     }
                 );
             }
-            catch (cosnt std::out_of_range&)
+            catch (const std::out_of_range&)
             {
-                Tracer::log<CriticalLvls::ERROR, std::out_of_range>(
-                    "No corresponding instruction translation."
-                );
+                log<CriticalLvls::ERROR, std::out_of_range>("No corresponding instruction translation.");
             }
 
             ss_value << static_cast<std::uint32_t>(instruction.m_imm) << '\n';
@@ -1380,9 +1404,7 @@ namespace scsp::tracer
             std::stringstream ss;
             ss << "Instruction #" << m_instruction_count
                << ", 0x"
-               << std::setfill('0')
-               << std::setw(sizeof(T) * 2)
-               << std::hex
+               << std::setfill('0') << std::setw(sizeof(T) * 2) << std::hex
                << binary
                << '\n';
             
@@ -1537,7 +1559,7 @@ namespace scsp::core
             {
                 auto binary = fetch();
 
-                if (testBitAll(binary))
+                if (testBitAll(binary).value())
                 {
                     break;
                 }
@@ -1564,39 +1586,38 @@ namespace scsp::core
             -> bool
         {
             using enum rf::SEGReg;
+            using enum rf::GPReg;
+            using enum rf::SEGReg;
+
             constexpr std::array<rf::SEGReg, 4> segment_registers{ CS, DS, SS, ES };
             if (
-                !std::ranges::all_of(
-                    segment_registers, [&segment_config](rf::SEGReg sr) { return segment_config.contains(sr); }
-                ))
+                !std::ranges::all_of(segment_registers, 
+                                     [&segment_config](rf::SEGReg sr) { return segment_config.contains(sr); })
+                )
             {
                 return false;
             }
             
             std::vector<Core::SegmentRange> ranges{};
-            ranges.reserve(4);
-            for (auto&& r : segment_config) {
+            for (auto&& r : segment_config)
+            {
                 ranges.emplace_back(r.second);
             }
 
-            auto checkInRange = [this](const Core::SegmentRange rng)
-                -> bool
+            if (
+                !std::ranges::all_of(ranges,
+                                     [this](const Core::SegmentRange rng) {
+                                        return rng.m_end >= rng.m_start && rng.m_start >= 0 && rng.m_end < this->memory_size;
+                                     })
+                )
             {
-                return (
-                    rng.m_end   >= rng.m_start &&
-                    rng.m_start >= 0         &&
-                    rng.m_end   <  this->memory_size
-                );
-            };
-            if (!std::ranges::all_of(ranges, checkInRange)) {
                 return false;
             }
 
-            std::ranges::sort(
-                ranges,
-                std::ranges::less{},
-                [](const Core::SegmentRange rng) { return rng.m_start };
-            );
+            std::ranges::sort(ranges,
+                              std::ranges::less{},
+                              [](const Core::SegmentRange rng) { return rng.m_start; });
+
             auto checkOverlap = [](const Core::SegmentRange rng1, const Core::SegmentRange rng2)
                 -> bool
             {
@@ -1610,9 +1631,10 @@ namespace scsp::core
             }
 
             if (
-                SystemBit result = std::accumulate(
-                    ranges.begin(), ranges.end(), 0,
-                    [](SystemBit&& i, const Core::SegmentRange rng) { return i + (rng.m_end - rng.m_start) + 1; });
+                system_bit_type result = std::accumulate(ranges.begin(), ranges.end(), 0,
+                                                         [](system_bit_type&& i, const Core::SegmentRange rng) {
+                                                             return i + (rng.m_end - rng.m_start) + 1;
+                                                         });
                 result > memory_size
                 )
             {
@@ -1621,8 +1643,6 @@ namespace scsp::core
 
             m_segment = std::forward<Segment>(segment_config);
 
-            using enum rf::GPReg;
-            using enum rf::SEGReg;
             m_register.getGeneralPurpose(SP) = m_segment.at(SS).m_end + 1;
             m_register.getGeneralPurpose(PC) = m_segment.at(CS).m_start;
 
@@ -1650,9 +1670,9 @@ namespace scsp::core
         {
             if (m_tracer != nullptr)
             {
-                m_tracer->generateTrace<system_bit_type,
+                m_tracer->generateTrace<system_bit_type ,
                                         instruction_type, memory_type,
-                                        register_type,    segment_type>(binary, instruction, m_memory, m_register, m_segment);
+                                        register_type   , segment_type>(binary, instruction, m_memory, m_register, m_segment);
             }
         }
 
@@ -1669,7 +1689,8 @@ namespace scsp::core
         {
             m_register.clearPsrValue();
 
-            for (auto&& flag : updated_flags) {
+            for (auto&& flag : updated_flags)
+            {
                 m_register.setProgramStatus(flag, true);
             }
         }
@@ -1684,7 +1705,8 @@ namespace scsp::core
 
             m_memory.write(static_cast<system_bit_type>(x), idx);
 
-            if constexpr (sizeof...(Ts) > 0) {
+            if constexpr (sizeof...(Ts) > 0)
+            {
                 recursiveLoaderHelper(idx + 1, limit, xs...);
             }
         }
@@ -1707,10 +1729,9 @@ namespace scsp::core
             using enum rf::SEGReg;
 
             if (
-                !Core::checkAddressInrange<system_bit_type>(
-                    m_register.getGeneralPurpose(PC), 
-                    m_segment.at(CS)
-                ))
+                !Core::checkAddressInrange<system_bit_type>(m_register.getGeneralPurpose(PC), 
+                                                            m_segment.at(CS))
+                )
             {
                 traceLog<tr::Tracer::CriticalLvls::ERROR, std::runtime_error>(
                     "Error: PC exceeds CS boundary!"
@@ -1751,23 +1772,27 @@ namespace scsp::core
                 -> alu_in_type
             {
                 using enum dc::OpType;
-                switch (switch_on)
+
+                switch (instruction.m_type)
                 {
-                    case Rt: {
+                    case Rt:
+                    {
                         return makeALUInput<system_bit_type>(
                             opcode, 
                             m_register.getGeneralPurpose(instruction.m_Rm), 
                             m_register.getGeneralPurpose(instruction.m_Rn)
                         );
                     }
-                    case It: {
+                    case It:
+                    {
                         return makeALUInput<system_bit_type>(
                             opcode, 
                             m_register.getGeneralPurpose(instruction.m_Rm), 
                             instruction.m_imm
                         );
                     }
-                    default: {
+                    default:
+                    {
                         traceLog<tr::Tracer::CriticalLvls::ERROR, std::runtime_error>(
                             "Unknown instruction type detected."
                         );
@@ -1779,6 +1804,7 @@ namespace scsp::core
 
             using au::ALUOpCode;
             using enum rf::GPReg;
+
             switch (instruction.m_code)
             {
                 case ADD : { return makeALUInputForRI(instruction, ALUOpCode::ADD);  }
@@ -1817,7 +1843,7 @@ namespace scsp::core
                         ALUOpCode::ADD, m_register.getGeneralPurpose(SP), 1
                     );
                 }
-                default: {
+                default:   {
                     traceLog<tr::Tracer::CriticalLvls::ERROR, std::runtime_error>("Unknown OpCode detected.");
                 }
             }
@@ -1857,34 +1883,41 @@ namespace scsp::core
 
             switch (instruction.m_code)
             {
-                case JMP: {
+                case JMP:
+                {
                     performJump(true, instruction.m_imm);
                     break;
                 }
-                case JZ:  {
+                case JZ: 
+                {
                     performJump(m_register.getProgramStatus(Z), instruction.m_imm);
                     break; 
                 }
-                case JN:  {
+                case JN: 
+                {
                     performJump(m_register.getProgramStatus(N), instruction.m_imm);
                     break;
                 }
-                case JC:  {
+                case JC: 
+                {
                     performJump(m_register.getProgramStatus(C), instruction.m_imm);
                     break;
                 }
-                case JV:  {
+                case JV: 
+                {
                     performJump(m_register.getProgramStatus(V), instruction.m_imm);
                     break;
                 }
-                case JZN: {
+                case JZN:
+                {
                     performJump(
                         m_register.getProgramStatus(Z) || m_register.getProgramStatus(N),
                         instruction.m_imm
                     );
                     break;
                 }
-                case SYSCALL: {
+                case SYSCALL:
+                {
                     try
                     {
                         syscall_type::template m_syscall_table<Core::memory_type, Core::register_type>.at(
@@ -1897,7 +1930,8 @@ namespace scsp::core
                     }
                     break;
                 }
-                default: {
+                default:
+                {
                     traceLog<tr::Tracer::CriticalLvls::ERROR, std::runtime_error>("Unknown OpCode detected.");
                     break;
                 }
