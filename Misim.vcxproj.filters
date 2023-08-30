@@ -30,7 +30,7 @@
   <ItemGroup>
     <None Include=".gitattributes" />
     <None Include=".gitignore" />
-    <None Include="UML\architechture.drawio" />
+    <None Include="uml\architechture.drawio" />
     <None Include="style_guide.md" />
   </ItemGroup>
   <ItemGroup>
