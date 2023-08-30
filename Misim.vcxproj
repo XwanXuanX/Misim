@@ -139,8 +139,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="hpp\overture.hpp" />
-    <ClInclude Include="hpp\tema.hpp" />
+    <ClInclude Include="hpp\prototype.hpp" />
+    <ClInclude Include="hpp\assembler.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="cpp\main.cpp" />
