@@ -1,6 +1,6 @@
 /*********************************************************************
  *
- *  @file   overture.hpp
+ *  @file   prototype.hpp
  *  @brief  Assembly Abstract machine (Ver.1)
  *
  *  @author Tony (Yetong) Li
