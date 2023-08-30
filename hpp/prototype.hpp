@@ -66,7 +66,8 @@ namespace scsp::memory
         auto write(const memory_width_type data, const memory_size_type address) noexcept
             -> std::expected<void, std::domain_error>
         {
-            if (!checkAddressInrange(address)) {
+            if (!checkAddressInrange(address))
+            {
                 return std::unexpected(
                     std::domain_error("Address out of range.")
                 );
@@ -80,7 +81,8 @@ namespace scsp::memory
         auto read(const memory_size_type address) noexcept
             -> std::expected<memory_width_type, std::domain_error>
         {
-            if (!checkAddressInrange(address)) {
+            if (!checkAddressInrange(address))
+            {
                 return std::unexpected(
                     std::domain_error("Address out of range.")
                 );
@@ -100,11 +102,14 @@ namespace scsp::memory
         auto clear(const memory_size_type begin, const memory_size_type end) noexcept
             -> std::expected<void, std::domain_error>
         {
-            if (begin == 0 && end == m_memory_size - 1) {
+            if (begin == 0 && end == m_memory_size - 1)
+            {
                 clear();
                 return {};
             }
-            if (!checkAddressInrange(begin) || !checkAddressInrange(end)) {
+
+            if (!checkAddressInrange(begin) || !checkAddressInrange(end))
+            {
                 return std::unexpected(
                     std::domain_error("Address out of range.")
                 );
@@ -535,6 +540,7 @@ namespace scsp::register_file
                     std::runtime_error("setBit / resetBit failed")
                 );
             }
+
             return {};
         }
 
@@ -771,7 +777,8 @@ namespace scsp::ALU
         {
             using ::scsp::freefuncs::testBitNone;
 
-            if (testBitNone(B) && B == 0x0) {
+            if (testBitNone(B) && B == 0x0)
+            {
                 return ALUOutput<T>{};
             }
             return makeOutput<T>(A / B);
@@ -784,7 +791,8 @@ namespace scsp::ALU
         {
             using ::scsp::freefuncs::testBitNone;
 
-            if (testBitNone(B) && B == 0x0) {
+            if (testBitNone(B) && B == 0x0)
+            {
                 return ALUOutput<T>{};
             }
             return makeOutput<T>(A % B);
