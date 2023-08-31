@@ -27,7 +27,7 @@
   <ItemGroup>
     <None Include=".gitattributes" />
     <None Include=".gitignore" />
-    <None Include="uml\architechture.drawio" />
+    <None Include="uml\arch.drawio" />
     <None Include="style_guide.md" />
     <None Include="util\assembler.py" />
   </ItemGroup>
