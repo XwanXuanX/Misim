@@ -149,6 +149,7 @@
     <None Include=".gitignore" />
     <None Include="style_guide.md" />
     <None Include="uml\architechture.drawio" />
+    <None Include="util\assembler.py" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="LICENSE.txt" />
