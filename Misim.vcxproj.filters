@@ -15,15 +15,12 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="hpp\prototype.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="hpp\assembler.hpp">
+    <ClInclude Include="core\hpp\prototype.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="cpp\main.cpp">
+    <ClCompile Include="core\cpp\main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
