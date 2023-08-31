@@ -139,10 +139,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="core\hpp\prototype.hpp" />
+    <ClInclude Include="core\main\prototype.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="core\cpp\main.cpp" />
+    <ClCompile Include="core\test\main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include=".gitattributes" />
