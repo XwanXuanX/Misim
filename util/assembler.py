@@ -44,6 +44,7 @@ Label:  JMP Ret ; Perform very complicated calculations
 
 import os
 import enum
+import logging
 import argparse
 import contextlib
 
@@ -240,6 +241,200 @@ def lexer(loc: str) -> list[Token]:
     return result
 
 
+class CustomeLoggingFormatter(logging.Formatter):
+    """ Custome logging formatter for error reporting. """
+
+    class ConsoleColor:
+        grey    = '\033[38;21m'
+        blue    = '\033[38;5;39m'
+        yellow  = '\033[38;5;226m'
+        red     = '\033[38;5;196m'
+        reset   = '\033[0m'
+
+    def __init__(self, fmt):
+        super().__init__()
+        
+        self.fmt = fmt
+        
+        self.FORMAT = {
+            logging.DEBUG   : self.ConsoleColor.grey + self.fmt + self.ConsoleColor.reset,
+            logging.INFO    : self.ConsoleColor.blue + self.fmt + self.ConsoleColor.reset,
+            logging.WARNING : self.ConsoleColor.yellow + self.fmt + self.ConsoleColor.reset,
+            logging.ERROR   : self.ConsoleColor.red + self.fmt + self.ConsoleColor.reset
+        }
+
+    def format(self, record):
+        log_fmt = self.FORMAT.get(record.levelno)
+        formatter = logging.Formatter(log_fmt)
+        return formatter.format(record)
+
+
+def getConfigedLogger(level: int, fmt: str) -> logging.Logger:
+    """ Create and config logger """
+
+    logger = logging.getLogger(__name__)
+    logger.setLevel(level)
+
+    # Create stdout handler
+    stdout_handler = logging.StreamHandler()
+    stdout_handler.setLevel(level)
+    stdout_handler.setFormatter(CustomeLoggingFormatter(fmt))
+
+    logger.addHandler(stdout_handler)
+
+    return logger
+
+
+class Keywords:
+    """ Contain all allowed keywords. """
+
+    segments: tuple[str, ...] = (
+        'data', 'extra', 'text'
+    )
+
+    OpCode: tuple[str, ...] = (
+        'ADD',      #  add two operands		    #		ADD  R1, R2, R3/imm		#		R1 <- R2 + R3/imm
+        'UMUL',	    #  multiple two operands	#		UMUL R1, R2, R3/imm		#		R1 <- R2 * R3/imm
+        'UDIV',		#  divide two operands		#		UDIV R1, R2, R3/imm		#		R1 <- R2 / R3/imm
+        'UMOL',		#		op1 % op2			#		UMOL R1, R2, R3/imm		#		R1 <- R2 % R3/imm
+
+        'AND',		#  bitwise And of A & B	    #		AND  R1, R2, R3/imm		#		R1 <- R2 & R3/imm
+        'ORR',		#  bitwise Or of A & B		#		ORR  R1, R2, R3/imm		#		R1 <- R2 | R3/imm
+        'XOR',		#  bitwise Xor of A & B	    #		XOR  R1, R2, R3/imm		#		R1 <- R2 ^ R3/imm
+        'SHL',		#  logical shift left		#		SHL  R1, R2, R3/imm		#		R1 <- R2 << R3/imm
+        'SHR',		#  logical shift right		#		SHR  R1, R2, R3/imm		#		R1 <- R2 >> R3/imm
+        'RTL',		#  logical rotate left		#		RTL  R1, R2, R3/imm		#		R1 <- R2 <~ R3/imm
+        'RTR',		#  logical rotate right	    #		RTR  R1, R2, R3/imm		#		R1 <- R2 ~> R3/imm
+
+        'NOT',		#  comp all the bits		#		NOT  R1, R2				#		R1 <- ~R2
+
+        'LDR',		#  load reg from mem		#		LDR  R1, R2				#		R1 <- [R2]
+        'STR',		#  store reg in mem		    #		STR  R1, R2				#		[R1] <- R2
+
+        'PUSH',		#  push reg onto stack		#		PUSH R1					#		[SP - 4] <- R1;
+        'POP',		#  pop top ele into reg	    #		POP	 R1					#		R1 <- [SP] + 4
+
+        'JMP',		#	unconditional jump		#		JMP label				#		N/A
+        'JZ',		#  jump if Z flag is set	#		JZ	label				#		N/A
+        'JN',		#  jump if N flag is set	#		JN	label				#		N/A
+        'JC',		#  jump if C flag is set	#		JC	label				#		N/A
+        'JV',		#  jump if V flag is set	#		JV	label				#		N/A
+        'JZN',		#  jump if Z or N is set	#		JZN label				#		N/A
+
+        'SYSCALL'	#  invokes system calls	    #		SYSCALL 1				#		N/A
+    )
+
+    registers: tuple[str, ...] = (
+        'R0',   #  \ 
+        'R1',   #   |
+        'R2',   #   |
+        'R3',   #   |
+        'R4',   #   |
+        'R5',   #   |  General
+        'R6',   #   |  Purpose
+        'R7',   #   |  Registers
+        'R8',   #   |
+        'R9',   #   |
+        'R10',  #   |
+        'R11',  #   |
+        'R12',  #  /
+
+        'SP',   #      Stack Pointer
+        'LR',   #      Link Register
+        'PC'    #      Program Counter
+    )
+
+    @classmethod
+    def isKeyword(cls, token: Token) -> bool:
+        """ Check if a token is a keyword token. """
+
+        if token.type != Token.TokenType.IDENTIFIER:
+            return False
+        
+        # Using caselessIn to ignore case differences
+        return (
+            caselessIn(token.value, cls.segments) or
+            caselessIn(token.value, cls.OpCode)   or
+            caselessIn(token.value, cls.registers)
+        )
+    
+    @classmethod
+    def isLabel(cls, token: Token) -> bool:
+        """ Check if a token is a label token. """
+
+        if token.type != Token.TokenType.IDENTIFIER:
+            return False
+        
+        # An identifier can only be a label or a keyword.
+        return not cls.isKeyword(token)
+
+
+def exitProgram(exit_code: int) -> None:
+    """ Log and exit program. """
+
+    # Log exit message
+    print(
+        "Assembler quited with error..."
+        if exit_code != 0 else
+        "Assembler quited successfully."
+    )
+    exit(None)
+
+
+class DataSegment:
+    """ Parse and record relavant information about data segment. """
+
+    def __init__(self, logger: logging.Logger) -> None:
+        """ Initialize data container. """
+
+        # Label as key - Label values as value
+        self.value_table: dict[str, list[int]] = dict()
+
+        # logging facility
+        self.logger: logging.Logger = logger
+    
+    def parse(self, token_stream: list[Token]) -> None:
+        """ Parse the token stream. """
+
+        # The pattern goes like: label1: n1, n2, n3, n4, ...
+        # Where label MUST NOT be a keyword.
+
+        # The first token must be a label
+        identifier: Token = token_stream.pop(0)
+
+        if not Keywords.isLabel(identifier):
+            self.logger.error(
+                "DataSegment: Data declarations not start with a label."
+            )
+            exitProgram(1)
+            return
+        
+        separator: Token = token_stream.pop(0)
+
+        if (separator.type  != Token.TokenType.SPECIAL or
+            separator.value != ":"):
+            self.logger.error(
+                "DataSegment: No ':' following label declaration."
+            )
+            exitProgram(1)
+            return
+        
+        # Now the token stream only contains "n1, n2, n3, n4, ..."
+        
+        
+
+
+
+
+
+        
+        
+
+        
+
+
+
+
 
 
 
@@ -252,20 +447,20 @@ def lexer(loc: str) -> list[Token]:
 def main():
     args = CommandlineArgs()
 
-    g = asmReaderGenerator(args.filepath)
+    logger = getConfigedLogger(
+        logging.INFO, 
+        '%(asctime)s | %(levelname)8s | %(message)s'
+    )
+    ds = DataSegment(logger)
 
-    tokens: list[list[Token]] = []
+    for line in asmReaderGenerator(args.filepath):
+        tokens = lexer(line)
+        for t in tokens:
+            print(t)
+        if tokens[0].value == '.':
+            continue
 
-    for line in g:
-        tokens.append(lexer(line))
-
-    for t in tokens:
-        for s in t:
-            print(s)
-        print('\n')
-
-    
-     
+        ds.parse(tokens)
 
 
 if __name__ == "__main__":
