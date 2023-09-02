@@ -392,7 +392,67 @@ class DataSegment:
 
         # logging facility
         self.logger: logging.Logger = logger
-    
+
+    class StateMachine:
+        """ Use state machine to check for grammer validity. """
+
+        @enum.unique
+        class States(enum.Enum):
+            NUMBER = enum.auto()
+            COMMA  = enum.auto()
+
+        def reset(self) -> None:
+            """ Reset current state to starting state. """
+            self.state = DataSegment.StateMachine.States.NUMBER
+
+        def __init__(self) -> None:
+            self.state: DataSegment.StateMachine.States
+            
+            # Initialize by reseting
+            self.reset()
+
+        def update(self, token: Token) -> bool:
+            """ 
+            Update current state with token;
+            Then return validity.
+            """
+
+            # Two state state-machine:
+            #              _____NUMBER___
+            #        _____|___       ____v_____
+            #       |         |     |          |
+            #  <----|  NUMBER |     |   COMMA  |__else__-> Error
+            #       |_________|     |__________|
+            #             ^_____COMMA____|
+
+            def isNumber(token: Token) -> bool:
+                return token.type == Token.TokenType.NUMBER
+            
+            def isComma(token: Token) -> bool:
+                return (
+                    token.type == Token.TokenType.SPECIAL and
+                    token.value == ","
+                )
+
+            if self.state == DataSegment.StateMachine.States.NUMBER:
+                # Expect token to be a number
+                if isNumber(token):
+                    self.state = DataSegment.StateMachine.States.COMMA
+                    return True
+                else:
+                    return False
+            
+            elif self.state == DataSegment.StateMachine.States.COMMA:
+                # Expect token to be a comman
+                if isComma(token):
+                    self.state = DataSegment.StateMachine.States.NUMBER
+                    return True
+                else:
+                    return False
+            
+            # Anything else happend, return False anyways
+            return False
+
     def parse(self, token_stream: list[Token]) -> None:
         """ Parse the token stream. """
 
@@ -409,6 +469,12 @@ class DataSegment:
             exitProgram(1)
             return
         
+        # Label must not be defined before
+        if identifier.value in self.value_table.keys():
+            self.logger.error("DataSegment: Label redefinition.")
+            exitProgram(1)
+            return
+        
         separator: Token = token_stream.pop(0)
 
         if (separator.type  != Token.TokenType.SPECIAL or
@@ -420,24 +486,45 @@ class DataSegment:
             return
         
         # Now the token stream only contains "n1, n2, n3, n4, ..."
+
+        # Use state machine to validate syntax
+        sm = DataSegment.StateMachine()
+
+        values: list[Token] = list()
+
+        for token in token_stream:
+            # Check syntax error
+            if not sm.update(token):
+                self.logger.error(
+                    "DataSegment: "
+                    "Declaration not follow the pattern 'n1, n2, n3, ...'."
+                )
+                exitProgram(1)
+                return
+            
+            # Store tokens
+            if token.type == Token.TokenType.NUMBER:
+                values.append(token)
         
+        # Populate value table
+        self.value_table[identifier.value] = list()
+
+        for token in values:
+            try:
+                self.value_table[identifier.value].append(
+                    int(token.value)
+                )
+            except ValueError:
+                self.logger.error(
+                    "DataSegment: Some data is not integer."
+                )
+                exitProgram(1)
+                return
         
-
-
-
+        return
 
 
         
-        
-
-        
-
-
-
-
-
-
-
 
 
 
@@ -455,12 +542,12 @@ def main():
 
     for line in asmReaderGenerator(args.filepath):
         tokens = lexer(line)
-        for t in tokens:
-            print(t)
         if tokens[0].value == '.':
             continue
 
         ds.parse(tokens)
+        print(ds.value_table)
+
 
 
 if __name__ == "__main__":
