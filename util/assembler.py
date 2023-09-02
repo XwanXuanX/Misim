@@ -635,9 +635,30 @@ class ExtraSegment:
             return
         
         return
+    
+    def size(self) -> int:
+        """ Calculate the size of this segment. """
 
+        segment_size: int = 0
 
+        for label, space in self.value_table.items():
+            segment_size += space
 
+        return segment_size
+    
+    def symbolTable(self) -> dict[str, int]:
+        """ Parse value table into a local symbol table. """
+
+        symbol_table: dict[str, int] = dict()
+
+        # Record the space used by previous declarations
+        prev_space: int = 0
+
+        for label, space in self.value_table.items():
+            symbol_table[label] = prev_space
+            prev_space += space
+
+        return symbol_table
 
 
 
@@ -661,8 +682,6 @@ def main():
             es.parse(tokens)
         else:
             ds.parse(tokens)
-
-        print(ds.size())
         print(es.value_table)
         print(ds.value_table)
 
