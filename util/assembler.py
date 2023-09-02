@@ -459,6 +459,14 @@ class DataSegment:
         # The pattern goes like: label1: n1, n2, n3, n4, ...
         # Where label MUST NOT be a keyword.
 
+        # Validate the length of token stream
+        if len(token_stream) < 3:
+            self.logger.error(
+                "DataSegment: Not enough token to analyze."
+            )
+            exitProgram(1)
+            return
+
         # The first token must be a label
         identifier: Token = token_stream.pop(0)
 
@@ -522,9 +530,112 @@ class DataSegment:
                 return
         
         return
+    
+    def size(self) -> int:
+        """ Calculate the size of this segment. """
 
+        segment_size: int = 0
 
+        for label, data in self.value_table.items():
+            assert isinstance(data, list)
+            segment_size += len(data)
+
+        return segment_size
+    
+    def symbolTable(self) -> dict[str, int]:
+        """ Parse value table into a local symbol table. """
+
+        symbol_table: dict[str, int] = dict()
+
+        # Keep track of current address
+        curr_address: int = 0
+
+        for label, data in self.value_table.items():
+            assert isinstance(data, list)
+
+            symbol_table[label] = curr_address
+            curr_address += len(data)
         
+        return symbol_table
+
+
+class ExtraSegment:
+    """ Parse and record relavant information about extra segment. """
+
+    def __init__(self, logger: logging.Logger) -> None:
+        """ Initialize data container. """
+
+        # Label as key - Label value as value
+        self.value_table: dict[str, int] = dict()
+
+        # logging facility
+        self.logger: logging.Logger = logger
+
+    def parse(self, token_stream: list[Token]) -> None:
+        """ Parse the token stream. """
+
+        # The pattern goes like: label1: number
+        # Where label MUST NOT be a keyword.
+
+        if len(token_stream) != 3:
+            self.logger.error(
+                "ExtraSegment: Wrong number of tokens to analyze."
+            )
+            exitProgram(1)
+            return
+        
+        # The first token must be a label
+        identifier: Token = token_stream.pop(0)
+    
+        if not Keywords.isLabel(identifier):
+            self.logger.error(
+                "ExtraSegment: "
+                "Space declaration not start with a label."
+            )
+            exitProgram(1)
+            return
+
+        # Label must not be defined before
+        if identifier.value in self.value_table.keys():
+            self.logger.error("ExtraSegment: Label redefinition.")
+            exitProgram(1)
+            return
+        
+        separator: Token = token_stream.pop(0)
+
+        if (separator.type  != Token.TokenType.SPECIAL or
+            separator.value != ":"):
+            self.logger.error(
+                "ExtraSegment: No ':' following label declaration."
+            )
+            exitProgram(1)
+            return
+        
+        # Now the token stream only contains one token "number"
+        assert len(token_stream) == 1
+
+        if token_stream[0].type != Token.TokenType.NUMBER:
+            self.logger.error(
+                "ExtraSegment: "
+                "Expecting a number token after label declaration."
+            )
+            exitProgram(1)
+            return
+        
+        # Populate value table
+        try:
+            self.value_table[identifier.value] = int(
+                token_stream[0].value
+            )
+        except ValueError:
+            self.logger.error(
+                "ExtraSegment: Data is not integer."
+            )
+            exitProgram(1)
+            return
+        
+        return
+
 
 
 
@@ -539,13 +650,20 @@ def main():
         '%(asctime)s | %(levelname)8s | %(message)s'
     )
     ds = DataSegment(logger)
+    es = ExtraSegment(logger)
 
     for line in asmReaderGenerator(args.filepath):
         tokens = lexer(line)
         if tokens[0].value == '.':
             continue
 
-        ds.parse(tokens)
+        if len(tokens) == 3:
+            es.parse(tokens)
+        else:
+            ds.parse(tokens)
+
+        print(ds.size())
+        print(es.value_table)
         print(ds.value_table)
 
 
