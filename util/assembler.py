@@ -367,6 +367,33 @@ class Keywords:
         
         # An identifier can only be a label or a keyword.
         return not cls.isKeyword(token)
+    
+    @classmethod
+    def isSegment(cls, token: Token) -> bool:
+        """ Check if a token is a segment token. """
+
+        if token.type != Token.TokenType.IDENTIFIER:
+            return False
+        
+        return caselessIn(token.value, cls.segments)
+    
+    @classmethod
+    def isOpcode(cls, token: Token) -> bool:
+        """ Check if a token is a opcode token. """
+
+        if token.type != Token.TokenType.IDENTIFIER:
+            return False
+        
+        return caselessIn(token.value, cls.OpCode)
+    
+    @classmethod
+    def isRegister(cls, token: Token) -> bool:
+        """ Check if a token is a register token. """
+
+        if token.type != Token.TokenType.IDENTIFIER:
+            return False
+        
+        return caselessIn(token.value, cls.registers)
 
 
 def exitProgram(exit_code: int) -> None:
@@ -661,6 +688,77 @@ class ExtraSegment:
         return symbol_table
 
 
+class Instruction:
+    """ Container class for single instruction. """
+
+    # Basic layout:
+    # 1 0 9 8   7 6 5 4   3 2 1 0   9 8 7 6   5 4 3 2   1 0 9 8   7 6 5 4   3 2 1 0
+    # 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0
+    # 					   \____/    \____/    \_____/   \_______________/   \_____/
+    # \_____________________|_/	   |		  |				  |				|
+    #			imm			 Rn		   Rm		  Rd			 OpCode		  OpType
+
+    @enum.unique
+    class InstructionType(enum.Enum):
+        """ Enum class for the type of instructions. """
+
+        # R_type: 2 source registers, 1 dest registers, no imm; Binary operations
+        # ADD Rd, Rs, Rm ; MUL Rd, Rs, Rm
+        Rt = enum.auto()
+
+        # I_type: 1 source register, 1 dest register, 1 imm; Binary operations, with imm
+        # ADD Rd, Rs, imm
+        It = enum.auto()
+
+        # U_type: 1 source register, 1 dest register, 0 imm; Unary operations
+        # NEG Rd, Rs ; NOT Rd, Rs ; LDR Rd, Rs ; STR Rd, Rs
+        Ut = enum.auto()
+
+        # S_type: 0 source register, 1 dest register, 0 imm (only for stack operations)
+        # PUSH Rd ; POP Rd
+        St = enum.auto()
+
+        # J_type: 0 source register, 0 dest register 1 imm (only for branching)
+        # JMP imm ; JEQ imm
+        Jt = enum.auto()
+    
+    def __init__(self) -> None:
+        # What's won't be in binary
+        self.label: str = None
+
+        # What's will be in binary
+        self.type: Instruction.InstructionType = None
+        self.code: str = None
+        self.Rd: str = None
+        self.Rm: str = None
+        self.Rn: str = None
+        self.imm: (str | int) = None
+
+
+class TextSegment:
+    """ Parse and record information about text segment. """
+
+    def __init__(self, logger: logging.Logger) -> None:
+        """ Initialize data container. """
+
+        # Sequentially stores instructions
+        self.instruction: list[Instruction] = list()
+
+        # Logging facility
+        self.logger: logging.Logger = logger
+    
+    def parse(self, token_stream: list[Token]) -> None:
+        """ Parse the token stream. """
+
+        
+
+
+
+
+
+
+
+
 
 
 def main():
@@ -682,6 +780,7 @@ def main():
             es.parse(tokens)
         else:
             ds.parse(tokens)
+        
         print(es.value_table)
         print(ds.value_table)
 
