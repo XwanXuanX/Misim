@@ -321,7 +321,8 @@ class Keywords:
         'JV',		#  jump if V flag is set	#		JV	label				#		N/A
         'JZN',		#  jump if Z or N is set	#		JZN label				#		N/A
 
-        'SYSCALL'	#  invokes system calls	    #		SYSCALL 1				#		N/A
+        'SYSCALL',	#  invokes system calls	    #		SYSCALL 1				#		N/A
+        'END'       #  end of execution
     )
 
     registers: tuple[str, ...] = (
@@ -704,23 +705,26 @@ class Instruction:
 
         # R_type: 2 source registers, 1 dest registers, no imm; Binary operations
         # ADD Rd, Rs, Rm ; MUL Rd, Rs, Rm
-        Rt = enum.auto()
+        Rt = "R Type"
 
         # I_type: 1 source register, 1 dest register, 1 imm; Binary operations, with imm
         # ADD Rd, Rs, imm
-        It = enum.auto()
+        It = "I Type"
 
         # U_type: 1 source register, 1 dest register, 0 imm; Unary operations
         # NEG Rd, Rs ; NOT Rd, Rs ; LDR Rd, Rs ; STR Rd, Rs
-        Ut = enum.auto()
+        Ut = "U Type"
 
         # S_type: 0 source register, 1 dest register, 0 imm (only for stack operations)
         # PUSH Rd ; POP Rd
-        St = enum.auto()
+        St = "S Type"
 
         # J_type: 0 source register, 0 dest register 1 imm (only for branching)
         # JMP imm ; JEQ imm
-        Jt = enum.auto()
+        Jt = "J Type"
+
+        def __str__(self) -> str:
+            return self.value
     
     def __init__(self) -> None:
         # What's won't be in binary
@@ -733,6 +737,16 @@ class Instruction:
         self.Rm: str = None
         self.Rn: str = None
         self.imm: (str | int) = None
+    
+    def __str__(self) -> str:
+        """ String rep of instruction """
+        return (
+            f"Label: {self.label}\n"
+            f"Type : {self.type}\n"
+            f"Code : {self.code}\n"
+            f"dmn  : {self.Rd}, {self.Rm}, {self.Rn}\n"
+            f"imm  : {self.imm}"
+        )
 
 
 class TextSegment:
@@ -744,11 +758,160 @@ class TextSegment:
         # Sequentially stores instructions
         self.instruction: list[Instruction] = list()
 
+        # Keep a list of used labels
+        self.used_label: list[str] = list()
+
         # Logging facility
         self.logger: logging.Logger = logger
     
+    class StateMachine:
+        """ Use state machine to check grammer validity. """
+
+        @enum.unique
+        class States(enum.Enum):
+            COMMA = enum.auto()
+            OTHER = enum.auto()
+
+        def reset(self) -> None:
+            """ Reset current state to starting state. """
+            self.state = TextSegment.StateMachine.States.OTHER
+        
+        def __init__(self) -> None:
+            self.state: TextSegment.StateMachine.States
+
+            # Initialize by reseting
+            self.reset()
+
+        @staticmethod
+        def isComma(token: Token) -> bool:
+            return (
+                token.type == Token.TokenType.SPECIAL and 
+                token.value == ","
+            )
+        
+        @staticmethod
+        def isOther(token: Token) -> bool:
+            # Other can be register, number, label
+            return (
+                Keywords.isRegister(token) or
+                token.type == Token.TokenType.NUMBER or
+                Keywords.isLabel(token)
+            )
+        
+        def update(self, token: Token) -> bool:
+            """
+            Update current state with token;
+            Return the validity of grammar.
+            """
+
+            if self.state == TextSegment.StateMachine.States.OTHER:
+                # Expect the token to be other
+                if self.isOther(token):
+                    self.state = TextSegment.StateMachine.States.COMMA
+                    return True
+                else:
+                    return False
+
+            elif self.state == TextSegment.StateMachine.States.COMMA:
+                # Expect the token to be a comma
+                if self.isComma(token):
+                    self.state = TextSegment.StateMachine.States.OTHER
+                    return True
+                else:
+                    return False
+
+            # Other than those, return False anyways
+            return False
+
     def parse(self, token_stream: list[Token]) -> None:
         """ Parse the token stream. """
+
+        inst: Instruction = Instruction()
+
+        # Two possibilities: Code with label, and code that don't
+
+        def parseLabel() -> None:
+            """ Parse the label part of instruction """
+            nonlocal inst
+            nonlocal token_stream
+
+            identifier: Token = token_stream.pop(0)
+            assert Keywords.isLabel(identifier)
+
+            # Label must not be defined before
+            if identifier.value in self.used_label:
+                self.logger("TextSegment: Label redefinition.")
+                exitProgram(1)
+                return
+
+            # Validate if there is a ':' followed
+            separator: Token = token_stream.pop(0)
+
+            if (separator.type  != Token.TokenType.SPECIAL or
+                separator.value != ":"):
+                self.logger.error(
+                    "TextSegment: No ':' following label declaration."
+                )
+                exitProgram(1)
+                return
+            
+            # Now the label is validated
+            inst.label = identifier.value
+            self.used_label.append(identifier.value)
+            return
+        
+        def parseOpcode() -> None:
+            """ Parse the Opcode of the instruction. """
+            nonlocal inst
+            nonlocal token_stream
+
+            identifier: Token = token_stream.pop(0)
+            assert Keywords.isOpcode(identifier)
+
+            # Simply store the opcode
+            inst.code = identifier.value
+            return
+        
+        # First validate if any instruction start with a label or a opcode
+        if (not Keywords.isLabel(token_stream[0]) and
+            not Keywords.isOpcode(token_stream[0])):
+            self.logger.error(
+                "TextSegment: Instruction not start with label or Opcode."
+            )
+            exitProgram(1)
+            return
+        
+        # If the instruction starts with a label
+        if Keywords.isLabel(token_stream[0]):
+            parseLabel()
+
+        # Then we parse opcode anyways
+        parseOpcode()
+
+        # For instructions with opcode only (such as 'END')
+        if len(token_stream) == 0:
+            return
+        
+        # Use the state machine to extract relavant information and validate grammar.
+        sm = TextSegment.StateMachine()
+
+        values: list[Token] = list()
+
+        for token in token_stream:
+            # Check syntax error
+            if not sm.update(token):
+                self.logger.error(
+                    "TextSegment: Opcode operands syntax error."
+                )
+                exitProgram(1)
+                return
+            
+            # Store valuable token
+            if TextSegment.StateMachine.isOther(token):
+                values.append(token)
+        
+        # Next analyze the value list
+
 
         
 
@@ -768,21 +931,20 @@ def main():
         logging.INFO, 
         '%(asctime)s | %(levelname)8s | %(message)s'
     )
-    ds = DataSegment(logger)
-    es = ExtraSegment(logger)
+
+    ts = TextSegment(logger)
 
     for line in asmReaderGenerator(args.filepath):
         tokens = lexer(line)
-        if tokens[0].value == '.':
-            continue
+        # for t in tokens:
+        #     print(t)
 
-        if len(tokens) == 3:
-            es.parse(tokens)
-        else:
-            ds.parse(tokens)
+        ts.parse(tokens)
         
-        print(es.value_table)
-        print(ds.value_table)
+        for i in ts.instruction:
+            print(i)
+
+
 
 
 
