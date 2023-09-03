@@ -740,12 +740,19 @@ class Instruction:
     
     def __str__(self) -> str:
         """ String rep of instruction """
+
+        dmn: str = (
+            f"{self.Rd if self.Rd is not None else ''} "
+            f"{self.Rm if self.Rm is not None else ''} "
+            f"{self.Rn if self.Rn is not None else ''} "
+        )
+
         return (
-            f"Label: {self.label}\n"
-            f"Type : {self.type}\n"
-            f"Code : {self.code}\n"
-            f"dmn  : {self.Rd}, {self.Rm}, {self.Rn}\n"
-            f"imm  : {self.imm}"
+            f"Label: {self.label if self.label is not None else ''}\n"
+            f"Type : {self.type  if self.type  is not None else ''}\n"
+            f"Code : {self.code  if self.code  is not None else ''}\n"
+            f"dmn  : {dmn}\n"
+            f"imm  : {self.imm   if self.imm   is not None else ''}\n"
         )
 
 
@@ -840,7 +847,7 @@ class TextSegment:
 
             # Label must not be defined before
             if identifier.value in self.used_label:
-                self.logger("TextSegment: Label redefinition.")
+                self.logger.error("TextSegment: Label redefinition.")
                 exitProgram(1)
                 return
 
@@ -890,6 +897,8 @@ class TextSegment:
 
         # For instructions with opcode only (such as 'END')
         if len(token_stream) == 0:
+            # Record instruction and leave
+            self.instruction.append(inst)
             return
         
         # Use the state machine to extract relavant information and validate grammar.
@@ -912,8 +921,166 @@ class TextSegment:
         
         # Next analyze the value list
 
+        def analyzeValueList(value_list: list[Token]) -> None:
+            """
+            Analyze value list to obtain register and imm information;
+            Deduce instruction type;
+            Fill instruction member.
+            """
+            nonlocal inst
 
+            # Validate the minimum length
+            assert len(value_list) >= 1
+            # Validate the maximum length
+            if len(value_list) > 3:
+                self.logger.error(
+                    "TextSegment: Too many operands in one instruction."
+                )
+                exitProgram(1)
+                return
+            
+            # Now start parsing operands
+            match len(value_list):
+                case 3:
+                    # If length is 3, then either Rt or It
+                    if (not Keywords.isRegister(value_list[0]) or
+                        not Keywords.isRegister(value_list[1])):
+                        self.logger.error(
+                            "TextSegment: "
+                            "R-type or I-type instruction missing Rd and Rm."
+                        )
+                        exitProgram(1)
+                        return
+                    
+                    inst.Rd = value_list[0].value
+                    inst.Rm = value_list[1].value
+
+                    if Keywords.isRegister(value_list[2]):
+                        # If the last operand is a register, then R-type.
+                        inst.type = Instruction.InstructionType.Rt
+                        inst.Rn = value_list[2].value
+
+                    elif Keywords.isLabel(value_list[2]):
+                        # If the last operand is a label, then I-type.
+                        inst.type = Instruction.InstructionType.It
+                        inst.imm = value_list[2].value
+                    
+                    elif value_list[2].type == Token.TokenType.NUMBER:
+                        # If the last operand is a number, then I-type.
+                        inst.type = Instruction.InstructionType.It
+                        try:
+                            inst.imm = int(value_list[2].value)
+                        except ValueError:
+                            self.logger.error(
+                                "TextSegment: "
+                                "Failed to convert imm to integer."
+                            )
+                            exitProgram(1)
+                            return
+                    
+                    else:
+                        self.logger.error(
+                            "TextSegment: Unexpected token."
+                        )
+                        exitProgram(1)
+                        return
+                    
+                    return
+                
+                case 2:
+                    # If length is 2, then only U-type instruction
+                    if (not Keywords.isRegister(value_list[0]) or
+                        not Keywords.isRegister(value_list[1])):
+                        self.logger.error(
+                            "TextSegment: "
+                            "U-type instruction missing Rd or Rm."
+                        )
+                        exitProgram(1)
+                        return
+                    
+                    inst.type = Instruction.InstructionType.Ut
+                    inst.Rd = value_list[0].value
+                    inst.Rm = value_list[1].value
+
+                    return
+                
+                case 1:
+                    # If length is 1, then either S-type or J-type
+                    value: Token = value_list.pop(0)
+
+                    if Keywords.isRegister(value):
+                        # If the operand is a register, then S-type
+                        inst.type = Instruction.InstructionType.St
+                        inst.Rd = value.value
+                    
+                    elif Keywords.isLabel(value):
+                        # If the operand is a label, then J-type
+                        inst.type = Instruction.InstructionType.Jt
+                        inst.imm = value.value
+                    
+                    elif value.type == Token.TokenType.NUMBER:
+                        # If the operand is a number, then J-type
+                        inst.type = Instruction.InstructionType.Jt
+                        try:
+                            inst.imm = int(value.value)
+                        except ValueError:
+                            self.logger.error(
+                                "TextSegment: "
+                                "Failed to convert imm to integer."
+                            )
+                            exitProgram(1)
+                            return
+                    
+                    else:
+                        self.logger.error(
+                            "TextSegment: Unexpected token."
+                        )
+                        exitProgram(1)
+                        return
+                    
+                    return
+                
+                case default:
+                    self.logger.error("TextSegment: Unexpected Error!")
+                    exitProgram(1)
+                    return
         
+        # Call the function
+        analyzeValueList(values)
+
+        # Push back the filled instruction
+        self.instruction.append(inst)
+
+        return
+    
+    def size(self) -> int:
+        """ Calculate the size of this segment. """
+
+        return len(self.instruction)
+    
+    def symbolTable(self) -> dict[str, int]:
+        """ Parse instruction label into local symbol table. """
+
+        symbol_table: dict[str, int] = dict()
+
+        for idx, inst in enumerate(self.instruction):
+            if inst.label is None:
+                continue
+            symbol_table[inst.label] = idx
+        
+        return symbol_table
+
+
+
+    
+
+    
+
+    
+
+
+
+
 
 
 
@@ -940,9 +1107,8 @@ def main():
         #     print(t)
 
         ts.parse(tokens)
-        
-        for i in ts.instruction:
-            print(i)
+
+        print(ts.symbolTable())
 
 
 
