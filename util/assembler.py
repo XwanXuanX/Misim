@@ -1071,10 +1071,59 @@ class TextSegment:
         return symbol_table
 
 
+@enum.unique
+class SegmentType(enum.Enum):
+    DATA  = "Data Segment"
+    EXTRA = "Extra Segment"
+    TEXT  = "Text Segment"
 
-    
+    def __str__(self) -> str:
+        return self.value
 
+
+def parseSegmentLabel(
+        logger: logging.Logger,
+        token_stream: list[Token]) -> (None | SegmentType):
+    """ Parse the segment label; Return the segment type. """
+
+    # In case non-label declaration code is passed in:
+    # Return None to signal not segment declaration
+    symbol: Token = token_stream.pop(0)
+    if (symbol.type  != Token.TokenType.SPECIAL or
+        symbol.value != "."):
+        return None
     
+    # Here the token stream must be a segment declaration
+    # Validate the length
+    if len(token_stream) != 1:
+        logger.error("SegmentLabel: Unexpected number of tokens.")
+        exitProgram(1)
+        return
+    
+    segment: Token = token_stream.pop(0)
+    # Validate the type
+    if not Keywords.isSegment(segment):
+        logger.error("SegmentLabel: Invalid segment symbol.")
+        exitProgram(1)
+        return
+    
+    # Pick the correct enum and return segment type
+    segment_type: tuple[SegmentType, ...] = (
+        SegmentType.DATA,
+        SegmentType.EXTRA,
+        SegmentType.TEXT
+    )
+
+    for label, type in zip(Keywords.segments, segment_type):
+        # Check for the matching label
+        if caselessCompare(label, segment.value):
+            return type
+    else:
+        logger.error("SegmentLabel: Invalid segment symbol.")
+        exitProgram(1)
+        return
+
+
 
     
 
@@ -1103,6 +1152,11 @@ def main():
 
     for line in asmReaderGenerator(args.filepath):
         tokens = lexer(line)
+
+        t = parseSegmentLabel(logger, [t for t in tokens])
+        if t is not None:
+            print(t)
+
         # for t in tokens:
         #     print(t)
 
