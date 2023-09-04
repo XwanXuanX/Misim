@@ -1124,8 +1124,97 @@ def parseSegmentLabel(
         return
 
 
+class Parser:
+    """ Parse the file in segments and store the data. """
 
-    
+    def __init__(
+            self,
+            logger  : logging.Logger,
+            filepath: str) -> None:
+        """ Initialize variables and segments. """
+
+        self.logger: logging.Logger = logger
+        self.filepath: str = filepath
+
+        # Three segments
+        self.ds: DataSegment  = DataSegment(self.logger)
+        self.es: ExtraSegment = ExtraSegment(self.logger)
+        self.ts: TextSegment  = TextSegment(self.logger)
+
+    def parse(self) -> None:
+        """ Parse the file line by line into an intermediate representation. """
+
+        # Validate file extension
+        if not self.filepath.endswith(".asm"):
+            self.logger.error("Invalid file name extension.")
+            exitProgram(1)
+            return
+        
+        # Validate the file path
+        if not os.path.exists(self.filepath):
+            self.logger.error("File path does not exist.")
+            exitProgram(1)
+            return
+        
+        # The active segment will be responsible for parsing
+        active_segment: (DataSegment | ExtraSegment | TextSegment | None) = None
+
+        def switchSegment(segment_type: (SegmentType | None)) -> bool:
+            """ Attempt to switch segment; Return true if did. """
+            nonlocal active_segment
+
+            match segment_type:
+                case SegmentType.DATA:
+                    active_segment = self.ds
+                    return True
+
+                case SegmentType.EXTRA:
+                    active_segment = self.es
+                    return True
+
+                case SegmentType.TEXT:
+                    active_segment = self.ts
+                    return True
+
+                case None:
+                    # Current line of code is not segment declaration
+                    return False
+            
+            # Unknown match fall through
+            self.logger.error("Unknown segment type.")
+            exitProgram(1)
+            return False
+        
+        # Now parse the file line by line
+        for line in asmReaderGenerator(self.filepath):
+            # Obtain the token stream
+            token_stream: list[Token] = lexer(line)
+
+            # Attempt to switch segment first
+            if  switchSegment(
+                    parseSegmentLabel(
+                        self.logger,
+                        # MUST copy the token stream here!
+                        [token for token in token_stream]
+                    )
+                ):
+                # If switch segment is successful, then ignore the line
+                continue
+
+            # The active segment should never be None
+            if active_segment is None:
+                self.logger.error("Missing segment declaration.")
+                exitProgram(1)
+                return
+            
+            # Use the active segment to parse the line
+            active_segment.parse(token_stream)
+        
+        return
+
+            
+
+
 
 
 
@@ -1148,22 +1237,8 @@ def main():
         '%(asctime)s | %(levelname)8s | %(message)s'
     )
 
-    ts = TextSegment(logger)
-
-    for line in asmReaderGenerator(args.filepath):
-        tokens = lexer(line)
-
-        t = parseSegmentLabel(logger, [t for t in tokens])
-        if t is not None:
-            print(t)
-
-        # for t in tokens:
-        #     print(t)
-
-        ts.parse(tokens)
-
-        print(ts.symbolTable())
-
+    p = Parser(logger, args.filepath)
+    p.parse()
 
 
 
