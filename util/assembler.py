@@ -1250,9 +1250,44 @@ class Parser:
         
         return
     
+    def getSymbolTable(self) -> dict[str, int]:
+        """ Obtain the global symbol table from each segment. """
+
+        # Global symbol table
+        symbol_table: dict[str, int] = dict()
+
+        # Symbol table of each segment
+        ds_st: dict[str, int] = self.ds.symbolTable()
+        es_st: dict[str, int] = self.es.symbolTable()
+        ts_st: dict[str, int] = self.ts.symbolTable()
+
+        # Need to make sure no label redefinition.
+        if (len(set(ds_st.keys()) & set(es_st.keys())) != 0 or
+            len(set(ds_st.keys()) & set(ts_st.keys())) != 0 or
+            len(set(es_st.keys()) & set(ts_st.keys())) != 0):
+            self.logger.error("Label redefinition.")
+            exitProgram(1)
+            return
+        
+        # Generate the new symbol table
+        # Order for segments: data -> extra -> text
+        symbol_table.update(ds_st)
+
+        ds_size: int = self.ds.size()
+        for label in es_st.keys():
+            es_st[label] += ds_size
+
+        symbol_table.update(es_st)
+
+        es_size: int = self.es.size()
+        for label in ts_st.keys():
+            ts_st[label] = ts_st[label] + es_size + ds_size
+
+        symbol_table.update(ts_st)
+
+        return symbol_table
     
-
-
+    
 
 
 
@@ -1270,9 +1305,8 @@ def main():
 
     p = Parser(logger, args.filepath)
     p.parse()
-    print(p.ds.symbolTable())
-    print(p.es.symbolTable())
-    print(p.ts.symbolTable())
+    st = p.getSymbolTable()
+    print(st)
 
 
 
