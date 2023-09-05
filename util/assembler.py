@@ -829,6 +829,36 @@ class TextSegment:
 
             # Other than those, return False anyways
             return False
+    
+    class ValidateOpcodeType:
+        """ Check if the opcode can have certain type. """
+
+        lookup_table: dict[Instruction.InstructionType, tuple[str, ...]] = {
+            Instruction.InstructionType.Rt: (
+                'ADD', 'UMUL', 'UDIV', 'UMOL', 'AND',
+                'ORR', 'XOR' , 'SHL' , 'RTL' , 'RTR'
+            ),
+            Instruction.InstructionType.It: (
+                'ADD', 'UMUL', 'UDIV', 'UMOL', 'AND',
+                'ORR', 'XOR' , 'SHL' , 'RTL' , 'RTR'
+            ),
+            Instruction.InstructionType.Ut: (
+                'NOT', 'LDR', 'STR'
+            ),
+            Instruction.InstructionType.St: (
+                'PUSH', 'POP'
+            ),
+            Instruction.InstructionType.Jt: (
+                'JMP', 'JZ', 'JN' ,
+                'JC' , 'JV', 'JZN',
+                'SYSCALL'
+            )
+        }
+
+        @classmethod
+        def validate(cls, inst: Instruction) -> bool:
+            """ Validate opcode and optype """
+            return caselessIn(inst.code, cls.lookup_table[inst.type])
 
     def parse(self, token_stream: list[Token]) -> None:
         """ Parse the token stream. """
@@ -1048,6 +1078,14 @@ class TextSegment:
         # Call the function
         analyzeValueList(values)
 
+        # Need to validate if the code match the type
+        if not TextSegment.ValidateOpcodeType.validate(inst):
+            self.logger.error(
+                "TextSegment: Opcode and Optype mismatch."
+            )
+            exitProgram(1)
+            return
+        
         # Push back the filled instruction
         self.instruction.append(inst)
 
@@ -1211,15 +1249,8 @@ class Parser:
             active_segment.parse(token_stream)
         
         return
-
-            
-
-
-
-
-
-
-
+    
+    
 
 
 
@@ -1239,6 +1270,9 @@ def main():
 
     p = Parser(logger, args.filepath)
     p.parse()
+    print(p.ds.symbolTable())
+    print(p.es.symbolTable())
+    print(p.ts.symbolTable())
 
 
 
