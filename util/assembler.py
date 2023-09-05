@@ -1287,7 +1287,74 @@ class Parser:
 
         return symbol_table
     
+    def updateTextSegmentLabels(self) -> None:
+        """ Update the labels in text segment instructions. """
+
+        symbol_table: dict[str, int] = self.getSymbolTable()
+
+        for inst in self.ts.instruction:
+            # If the imm of the instruction is None or number
+            if inst.imm is None or isinstance(inst.imm, int):
+                continue
+
+            # Validate the type to make sure
+            assert isinstance(inst.imm, str)
+
+            # Try to replace the label by the value in the symbol table
+            try:
+                inst.imm = symbol_table[inst.imm]
+            # Report error when out of range access
+            except KeyError:
+                self.logger.error("Access undefined label.")
+                exitProgram(1)
+                return
+        
+        return
+
+
+class CodeGenerator:
+    """ Generate the binary instructions from the intermediate representation. """
+
+    """
+    The structure of the binary file:
+
+    d
+    0 10
+    e
+    11 23
+    t
+    24 34
+    d
+    data1
+    data2
+    ...
+    t
+    inst1
+    inst2
+    ...
+    """
     
+    def __init__(
+            self,
+            output_path  : str,
+            data_segment : DataSegment,
+            extra_segment: ExtraSegment,
+            text_segment : TextSegment,
+            logger       : logging.Logger) -> None:
+        """ Initialize members. """
+
+        # The output path of binary file
+        self.output_path: str = output_path
+
+        # Segments parsed by parser
+        self.ds: DataSegment = data_segment
+        self.es: ExtraSegment = extra_segment
+        self.ts: TextSegment = text_segment
+
+        # Logger for error logging
+        self.logger: logging.Logger = logger
+    
+
 
 
 
@@ -1305,8 +1372,7 @@ def main():
 
     p = Parser(logger, args.filepath)
     p.parse()
-    st = p.getSymbolTable()
-    print(st)
+    p.updateTextSegmentLabels()
 
 
 
