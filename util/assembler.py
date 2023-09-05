@@ -47,6 +47,7 @@ import enum
 import logging
 import argparse
 import contextlib
+from collections import namedtuple
 
 
 def getArgumentParser():
@@ -67,6 +68,15 @@ def getArgumentParser():
         help='Provide the path to the asm file.'
     )
     parser.add_argument(
+        '-d', '--dest',
+        dest='destpath',
+        action='store',
+        type=str,
+        metavar='PATH',
+        required=False,
+        help='Provide the path to the binary file.'
+    )
+    parser.add_argument(
         '-c', '--check',
         dest='check',
         action='store_true',
@@ -79,6 +89,7 @@ def getArgumentParser():
 
 class CommandlineArgs:
     filepath: str
+    destpath: str
     check: bool
 
     def __init__(self) -> None:
@@ -89,8 +100,18 @@ class CommandlineArgs:
         parser = getArgumentParser()
         args = parser.parse_args()
         cls.filepath = args.filepath
+        cls.destpath = args.destpath
         cls.check = args.check
 
+        # Check the arguments validity
+        # If the assembler is in check mode, no need the dest path
+        if not cls.check and cls.destpath is None:
+            print("Not in checking mode - No destination path provided.")
+            exitProgram(1)
+            return
+        
+        # If is in checking mode, dest path will be ignored
+        return
 
 def asmReaderGenerator(file_path: str) -> (Generator | list):
     """ Return generator that read asm file line by line. """
@@ -695,8 +716,8 @@ class Instruction:
     # Basic layout:
     # 1 0 9 8   7 6 5 4   3 2 1 0   9 8 7 6   5 4 3 2   1 0 9 8   7 6 5 4   3 2 1 0
     # 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0
-    # 					   \____/    \____/    \_____/   \_______________/   \_____/
-    # \_____________________|_/	   |		  |				  |				|
+    # 					  \____/    \____/    \_____/   \_______________/   \_____/
+    # \_____________________|_/	       |		  |				  |				|
     #			imm			 Rn		   Rm		  Rd			 OpCode		  OpType
 
     @enum.unique
@@ -725,6 +746,15 @@ class Instruction:
 
         def __str__(self) -> str:
             return self.value
+    
+    # Loop up table for Opcode type
+    type_lut: dict[InstructionType, int] = {
+        InstructionType.Rt: 0,
+        InstructionType.It: 1,
+        InstructionType.Ut: 2,
+        InstructionType.St: 3,
+        InstructionType.Jt: 4
+    }
     
     def __init__(self) -> None:
         # What's won't be in binary
@@ -1312,6 +1342,32 @@ class Parser:
         return
 
 
+class EncodingRules:
+    """
+    The class defines instruction encoding rules.
+    Can and should be swapped out easily.
+    """
+
+    # Basic layout:
+    # 1 0 9 8   7 6 5 4   3 2 1 0   9 8 7 6   5 4 3 2   1 0 9 8   7 6 5 4   3 2 1 0
+    # 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0 , 0 0 0 0
+    # 					  \____/    \____/    \_____/   \_______________/   \_____/
+    # \_____________________|_/	       |		  |				  |				|
+    #			imm			 Rn		   Rm		  Rd			 OpCode		  OpType
+
+    # The target width after encoding
+    instruction_width: int = 32
+
+    field = namedtuple("field", ["start_idx", "length"])
+
+    op_type = field(start_idx=0,  length=4)
+    op_code = field(start_idx=4,  length=8)
+    Rd      = field(start_idx=12, length=4)
+    Rm      = field(start_idx=16, length=4)
+    Rn      = field(start_idx=20, length=4)
+    imm     = field(start_idx=20, length=12)
+
+
 class CodeGenerator:
     """ Generate the binary instructions from the intermediate representation. """
 
@@ -1354,27 +1410,199 @@ class CodeGenerator:
         # Logger for error logging
         self.logger: logging.Logger = logger
     
+    def generateHeading(self) -> str:
+        """ Generate the heading for binary file. """
 
+        heading: str = ""
 
+        # Data
+        ds_size: int = self.ds.size()
+        ds_start: int = 0
+        ds_end: int = 0 if ds_size == 0 else ds_size - 1
+        heading += f"d\n{ds_start} {ds_end}\n"
 
+        # Extra
+        es_size: int = self.es.size()
+        es_start: int = ds_end + 1
+        es_end: int = es_start if es_size == 0 else (es_start + es_size - 1)
+        heading += f"e\n{es_start} {es_end}\n"
 
+        # Text
+        ts_size: int = self.ts.size()
+        ts_start: int = es_end + 1
+        ts_end: int = ts_start if ts_size == 0 else (ts_start + ts_size - 1)
+        heading += f"t\n{ts_start} {ts_end}\n"
 
+        return heading
+    
+    def generateData(self) -> str:
+        """ Generate the data for the data segment. """
 
+        # Get all the data from ds
+        symbol_table: list[tuple[str, int]] = [
+            tup for tup in self.ds.symbolTable().items()
+        ]
+        # Sort the label based on it's addr
+        symbol_table.sort(key=lambda tup: tup[1])
+
+        data: list[int] = list()
+
+        # Using the sorted symbol table as keys to access value table
+        # In this case can maintain the address order
+        for label, _ in symbol_table:
+            data.extend(self.ds.value_table.get(label))
+        
+        return "\n".join([str(n) for n in data])
+    
+    def generateCode(self) -> str:
+        """ Generate the instructions for the text segment """
+
+        def generateOne(inst: Instruction) -> int:
+            """ Translate one instruction to integer. """
+
+            binary: int = 0
+            
+            # SHL variable record the number of bits needed to shift left
+            shl: int = 0
+
+            # Type
+            if inst.type is None:
+                self.logger.error(
+                    "CodeGeneration: Instruction type is None."
+                )
+                exitProgram(1)
+                return
+            
+            binary |= (Instruction.type_lut.get(inst.type) << shl)
+            shl += EncodingRules.op_type.length
+
+            # Code
+            if (inst.code is None or
+                not caselessIn(inst.code, Keywords.OpCode) or
+                len(bin(Keywords.OpCode.index(inst.code.upper()))[2:]) > EncodingRules.op_code.length
+                ):
+                self.logger.error(
+                    "CodeGeneration: Invalid instruction code."
+                )
+                exitProgram(1)
+                return
+            
+            binary |= (Keywords.OpCode.index(inst.code.upper()) << shl)
+            shl += EncodingRules.op_code.length
+
+            # Rd, Rm, Rn
+            binary |= ((Keywords.registers.index(inst.Rd.upper()) if inst.Rd is not None else 0) << shl)
+            shl += EncodingRules.Rd.length
+            binary |= ((Keywords.registers.index(inst.Rm.upper()) if inst.Rm is not None else 0) << shl)
+            shl += EncodingRules.Rm.length
+            binary |= ((Keywords.registers.index(inst.Rn.upper()) if inst.Rn is not None else 0) << shl)
+            
+            def validateBinary(binary: int) -> None:
+                """ At the end validate instruction length """
+
+                if len(bin(binary)[2:]) > EncodingRules.instruction_width:
+                    self.logger.error(
+                        "CodeGeneration: Instruction length exceeds width."
+                    )
+                    exitProgram(1)
+                    return
+            
+            # Special case: if Rn is None, then no need to increase shl
+            if inst.Rn is not None:
+                # Then won't have imm
+                validateBinary(binary)
+                return binary
+            
+            # Otherwise, use the old shl for imm
+            if inst.imm is not None and not isinstance(inst.imm, int):
+                self.logger.error(
+                    "CodeGeneration: Immediate is not integer."
+                )
+                exitProgram(1)
+                return
+
+            binary |= ((inst.imm if inst.imm is not None else 0) << shl)
+
+            validateBinary(binary)
+
+            return binary
+        
+        # Record the binaries
+        insts: list[int] = list()
+
+        for inst in self.ts.instruction:
+            if caselessCompare("END", inst.code):
+                # Generate the end signal
+                insts.append(2**EncodingRules.instruction_width - 1)
+                continue
+            # Push back the binary
+            insts.append(generateOne(inst))
+        
+        # Turn integers to strings
+        return "\n".join([str(n) for n in insts])
+    
+    def generate(self) -> None:
+        """ The function that actually write to file. """
+
+        if not self.output_path.endswith(".bin"):
+            self.logger.error("CodeGeneration: Output file with invalid entension.")
+            exitProgram(1)
+            return
+        
+        with open(self.output_path, 'w+') as binary_file:
+            binary_file.write(self.generateHeading())
+            binary_file.write("d\n")
+            binary_file.write(self.generateData() + '\n')
+            binary_file.write("t\n")
+            binary_file.write(self.generateCode())
+
+        return
 
 
 def main():
+    # Parse arguments
     args = CommandlineArgs()
 
+    # Create the logger
     logger = getConfigedLogger(
         logging.INFO, 
         '%(asctime)s | %(levelname)8s | %(message)s'
     )
 
-    p = Parser(logger, args.filepath)
-    p.parse()
-    p.updateTextSegmentLabels()
+    parser = Parser(logger, args.filepath)
 
+    # Parse the file
+    logger.info("Start parsing...")
+    parser.parse()
+    logger.info("Parsing finished!")
 
+    # Update the label to integers
+    logger.info("Updating instruction labels...")
+    parser.updateTextSegmentLabels()
+    logger.info("Updating finished!")
+
+    # If the assembler runs in check mode, return from here
+    if args.check:
+        logger.info("Complete checks without error!")
+        return
+    
+    generator = CodeGenerator(
+        args.destpath, 
+        parser.ds, 
+        parser.es, 
+        parser.ts, 
+        logger
+    )
+
+    # Generate bin file
+    logger.info("Starting binary generation...")
+    generator.generate()
+    logger.info("Generation finished!")
+
+    # Exit the program
+    exitProgram(0)
+
+    return
 
 
 if __name__ == "__main__":
