@@ -140,7 +140,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="core\main\prototype.hpp" />
-    <ClInclude Include="util\loader.hpp" />
+    <ClInclude Include="util\utility.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="core\test\main.cpp" />
