@@ -1,40 +1,20 @@
 #include "prototype.hpp"
 
 int main() {
-	std::cout << std::hex;
-	
-	using core = ::scsp::core::Core<std::uint32_t, 50, ::scsp::syscall::SyscallTable>;
+	using core = ::scsp::core::Core<std::uint32_t, 300, ::scsp::syscall::SyscallTable>;
 	using enum ::scsp::register_file::SEGReg;
-	core::segment_type seg = {
-		{DS, {31, 47}},
-		{ES, {48, 48}},
-		{SS, {25, 30}},
-		{CS, {0,  24}}
-	};
+
+	core::Loader loader(std::filesystem::path("C:\\Users\\lzlu1\\Desktop\\program.bin"));
+
 	::scsp::tracer::Tracer t("C:\\Users\\lzlu1\\Desktop\\tracer2.csv");
-	core c{ std::move(seg), &t};
-	c.dataLoader(
-		0x68,
-		0x65,
-		0x6c,
-		0x6c,
-		0x6f,
-		0x20,
-		0x77,
-		0x6f,
-		0x72,
-		0x6c,
-		0x64
-	);
-	c.instructionLoader(
-		0x00000060,
-		0x01f00001,
-		0x00111060,
-		0x00b11001,
-		0x00200164,
-		0x00100164,
-		0xffffffff
-	);
+
+	loader.parseBinaryFile();
+
+	core c{ loader.getSegments() , &t};
+
+	c.dataLoader<core::Loader::data_type>(loader.getData());
+	c.instructionLoader<core::Loader::instruction_type>(loader.getInstruction());
+	
 	c.run();
 }
 
