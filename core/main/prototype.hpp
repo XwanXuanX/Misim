@@ -1568,6 +1568,30 @@ namespace scsp::core
             recursiveLoaderHelper(m_segment.at(DS).m_start, m_segment.at(DS).m_end, da, das...);
         }
 
+        template <typename Container> constexpr
+        auto instructionLoader(std::add_rvalue_reference_t<Container> instructions) noexcept
+            -> void
+        {
+            using enum rf::SEGReg;
+            iterativeLoaderHelper<std::remove_reference_t<Container>>(
+                m_segment.at(CS).m_start,
+                m_segment.at(CS).m_end,
+                std::forward<Container>(instructions)
+            );
+        }
+
+        template <typename Container> constexpr
+        auto dataLoader(std::add_rvalue_reference_t<Container> data) noexcept
+            -> void
+        {
+            using enum rf::SEGReg;
+            iterativeLoaderHelper<std::remove_reference_t<Container>>(
+                m_segment.at(DS).m_start,
+                m_segment.at(DS).m_end,
+                std::forward<Container>(data)
+            );
+        }
+
         constexpr
         auto run()
             -> void
@@ -1732,6 +1756,24 @@ namespace scsp::core
             {
                 recursiveLoaderHelper(idx + 1, limit, xs...);
             }
+        }
+
+        template <typename Container> constexpr
+        auto iterativeLoaderHelper(const std::size_t idx, const std::size_t limit,
+                                   std::add_rvalue_reference_t<Container> container) noexcept
+            -> void
+        {
+            for (auto i{ idx }; const system_bit_type data : container)
+            {
+                if (i > limit) {
+                    return;
+                }
+
+                m_memory.write(static_cast<system_bit_type>(data), i);
+                ++i;
+            }
+
+            return;
         }
 
         template <std::convertible_to<typename alu_in_type::operand_width_type> T> inline static constexpr
