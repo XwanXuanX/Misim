@@ -2298,6 +2298,7 @@ namespace scsp::core
             appendStackSize();
         }
 
+    private:
         auto appendStackSize() noexcept
             -> void
         {
@@ -2322,6 +2323,7 @@ namespace scsp::core
             return;
         }
 
+    public:
         auto getData() const noexcept
             -> data_type
         {
