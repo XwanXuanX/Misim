@@ -36,6 +36,9 @@
 #include <unordered_set>
 #include <unordered_map>
 
+// utility::generator
+#include "utility.hpp"
+
 
 namespace scsp::memory
 {
@@ -448,6 +451,12 @@ namespace scsp::freefuncs
     {
         return n;
     }
+
+    template <class T, template <class...> class Template>
+    struct is_specialization : std::false_type {};
+
+    template <template <class...> class Template, class... Args>
+    struct is_specialization<Template<Args...>, Template> : std::true_type {};
 }
 
 
@@ -1489,8 +1498,8 @@ namespace scsp::core
     namespace tr = ::scsp::tracer;
 
     template <std::unsigned_integral SystemBit,
-              std::size_t MemorySize,
-              typename SyscallTable>
+              std::size_t            MemorySize,
+              typename               SyscallTable>
     class Core
     {
     public:
@@ -1516,6 +1525,8 @@ namespace scsp::core
 
         using segment_type = std::unordered_map<rf::SEGReg, Core::SegmentRange>;
         using syscall_type = SyscallTable;
+
+        class Loader;
 
     public:
         template <valid_forwarding_reference_type<segment_type> Segment> [[nodiscard]] constexpr explicit
@@ -2029,5 +2040,311 @@ namespace scsp::core
         segment_type  m_segment{};
 
         tr::Tracer*   m_tracer;
+    };
+
+    template <std::unsigned_integral SystemBit,
+              std::size_t            MemorySize,
+              typename               SyscallTable>
+    class Core<SystemBit, MemorySize, SyscallTable>::Loader
+    {
+    public:
+        using data_type        = std::vector<system_bit_type>;
+        using instruction_type = std::vector<system_bit_type>;
+
+    private:
+        [[nodiscard]] static
+        auto binaryFileGenerator(std::ifstream file) noexcept
+            -> utility::generator::Generator<std::string>
+        {
+            std::string line{};
+
+            while (std::getline(file, line))
+            {
+                if (
+                    line.length() == 0
+                    || line.starts_with(';')
+                    )
+                {
+                    continue;
+                }
+
+                co_yield line;
+            }
+
+            co_return;
+        }
+
+    public:
+        Loader() noexcept = delete;
+
+        [[nodiscard]] explicit
+        Loader(const std::filesystem::path& file_path)
+        {
+            if (
+                !std::filesystem::exists(file_path)
+                || !file_path.has_extension()
+                || file_path.extension() != ".bin"
+                )
+            {
+                throw std::filesystem::filesystem_error(
+                    "Invalid binary file path.",
+                    std::error_code(1, std::system_category())
+                );
+            }
+
+            m_file_stream = std::ifstream(file_path.c_str());
+        }
+
+        [[nodiscard]] explicit
+        Loader(std::ifstream file_stream)
+            : m_file_stream{ std::move(file_stream) }
+        {
+        }
+
+    private:
+        template <typename Callable>
+        struct State
+        {
+            std::string m_name{};
+            int         m_id  {};
+
+            std::function<Callable> method{};
+        };
+
+        static constexpr
+        auto isNumeric(const std::string& str) noexcept
+            -> bool
+        {
+            return std::ranges::all_of(
+                str,
+                [](const char ch) noexcept -> bool {
+                    return std::isdigit(ch) || ch == ' ';
+                }
+            );
+        }
+
+        static
+        auto parseHeading(const ::scsp::register_file::SEGReg symbol,
+                          const std::string& line,
+                          segment_type&      segm                    )
+            -> void
+        {
+            if (!Loader::isNumeric(line))
+            {
+                throw std::invalid_argument("Line not numeric.");
+            }
+
+            std::istringstream iss{ line };
+            system_bit_type start_addr{}, end_addr{};
+
+            iss >> start_addr >> end_addr;
+
+            if (start_addr > end_addr)
+            {
+                throw std::logic_error("Starting address higher than ending address.");
+            }
+
+            segm.insert_or_assign(
+                symbol,
+                SegmentRange{ start_addr, end_addr }
+            );
+        }
+
+        static
+        auto parseDataSize(const std::string& line, data_type&, instruction_type&,
+                           segment_type&      segm                                )
+            -> void
+        {
+            using enum ::scsp::register_file::SEGReg;
+            Loader::parseHeading(DS, line, segm);
+        }
+
+        static
+        auto parseExtraSize(const std::string& line, data_type&, instruction_type&,
+                            segment_type&      segm                                )
+            -> void
+        {
+            using enum ::scsp::register_file::SEGReg;
+            Loader::parseHeading(ES, line, segm);
+        }
+
+        static
+        auto parseTextSize(const std::string& line, data_type&, instruction_type&,
+                           segment_type&      segm                                )
+            -> void
+        {
+            using enum ::scsp::register_file::SEGReg;
+            Loader::parseHeading(CS, line, segm);
+        }
+
+        template <typename ContainerType> static
+        auto parseBody(const std::string& line,
+                       std::add_lvalue_reference_t<ContainerType> container)
+            -> void
+        {
+            if (!Loader::isNumeric(line))
+            {
+                throw std::invalid_argument("Line not numeric.");
+            }
+
+            std::istringstream iss{ line };
+            system_bit_type data{};
+
+            iss >> data;
+
+            container.push_back(data);
+        }
+
+        static
+        auto parseDataData(const std::string& line,
+                           data_type&         data, instruction_type&, segment_type&)
+            -> void
+        {
+            Loader::parseBody<data_type>(line, data);
+        }
+
+        static
+        auto parseTextData(const std::string& line, data_type&,
+                           instruction_type&  inst, segment_type&)
+            -> void
+        {
+            Loader::parseBody<instruction_type>(line, inst);
+        }
+
+        struct StateSelector
+        {
+        public:
+            using state_type = Loader::State<void(const std::string&,
+                                                  data_type&, instruction_type&, segment_type&)>;
+
+            enum class States : std::uint8_t
+            {
+                ds, es, ts, dd, td
+            };
+
+        public:
+            auto update(const StateSelector::States update_to) noexcept
+                -> void
+            {
+                auto pickUpdateState = [](const StateSelector::States update_to) noexcept
+                    -> state_type
+                {
+                    switch (update_to)
+                    {
+                        case StateSelector::States::ds: { return { "ds", 0, Loader::parseDataSize  }; }
+                        case StateSelector::States::es: { return { "es", 1, Loader::parseExtraSize }; }
+                        case StateSelector::States::ts: { return { "ts", 2, Loader::parseTextSize  }; }
+                        case StateSelector::States::dd: { return { "dd", 3, Loader::parseDataData  }; }
+                        case StateSelector::States::td: { return { "td", 4, Loader::parseTextData  }; }
+                    }
+
+                    return {};
+                };
+
+                m_state = pickUpdateState(update_to);
+            }
+
+            auto run(const std::string& line, data_type& data, instruction_type& inst, segment_type& segm) const
+                -> void
+            {
+                if (!m_state.m_name.length() && m_state.m_id == 0)
+                {
+                    std::cout << "Error: m_state used without being initialized.\n";
+
+                    throw std::runtime_error(
+                        "Attempt to run with empty state."
+                    );
+                }
+
+                m_state.method(line, data, inst, segm);
+            }
+
+        private:
+            state_type m_state{};
+        };
+
+    public:
+        auto parseBinaryFile()
+            -> void
+        {
+            using namespace utility::generator;
+
+            StateSelector state_selector{};
+
+            std::unordered_map<std::string, StateSelector::States> lut
+            {
+                { "ds", StateSelector::States::ds },
+                { "es", StateSelector::States::es },
+                { "ts", StateSelector::States::ts },
+                { "dd", StateSelector::States::dd },
+                { "td", StateSelector::States::td }
+            };
+
+            for (const std::string& line : Loader::binaryFileGenerator(std::move(m_file_stream)))
+            {
+                if (!line.length()) {
+                    continue;
+                }
+
+                if (lut.contains(line))
+                {
+                    state_selector.update(lut.at(line));
+                    continue;
+                }
+
+                state_selector.run(line, m_data, m_instructions, m_segments);
+            }
+
+            appendStackSize();
+        }
+
+        auto appendStackSize() noexcept
+            -> void
+        {
+            using element_type = std::pair<::scsp::register_file::SEGReg, SegmentRange>;
+
+            auto maximum = std::ranges::max_element(
+                m_segments,
+                [](const element_type& lhs, const element_type& rhs) noexcept -> bool {
+                    return lhs.second.m_end < rhs.second.m_end;
+                }
+            );
+
+            using enum ::scsp::register_file::SEGReg;
+            m_segments.insert_or_assign(
+                SS,
+                SegmentRange{
+                    .m_start = (maximum->second.m_end) + 1,
+                    .m_end   =  MemorySize - 1
+                }
+            );
+
+            return;
+        }
+
+        auto getData() const noexcept
+            -> data_type
+        {
+            return m_data;
+        }
+
+        auto getInstruction() const noexcept
+            -> instruction_type
+        {
+            return m_instructions;
+        }
+
+        auto getSegments() const noexcept
+            -> segment_type
+        {
+            return m_segments;
+        }
+
+    private:
+        std::ifstream    m_file_stream {};
+
+        data_type        m_data        {};
+        instruction_type m_instructions{};
+        segment_type     m_segments    {};
     };
 }
