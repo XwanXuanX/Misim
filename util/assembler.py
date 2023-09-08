@@ -1419,19 +1419,19 @@ class CodeGenerator:
         ds_size: int = self.ds.size()
         ds_start: int = 0
         ds_end: int = 0 if ds_size == 0 else ds_size - 1
-        heading += f"d\n{ds_start} {ds_end}\n"
+        heading += f"ds\n{ds_start} {ds_end}\n"
 
         # Extra
         es_size: int = self.es.size()
         es_start: int = ds_end + 1
         es_end: int = es_start if es_size == 0 else (es_start + es_size - 1)
-        heading += f"e\n{es_start} {es_end}\n"
+        heading += f"es\n{es_start} {es_end}\n"
 
         # Text
         ts_size: int = self.ts.size()
         ts_start: int = es_end + 1
         ts_end: int = ts_start if ts_size == 0 else (ts_start + ts_size - 1)
-        heading += f"t\n{ts_start} {ts_end}\n"
+        heading += f"ts\n{ts_start} {ts_end}\n"
 
         return heading
     
@@ -1551,9 +1551,9 @@ class CodeGenerator:
         
         with open(self.output_path, 'w+') as binary_file:
             binary_file.write(self.generateHeading())
-            binary_file.write("d\n")
+            binary_file.write("dd\n")
             binary_file.write(self.generateData() + '\n')
-            binary_file.write("t\n")
+            binary_file.write("td\n")
             binary_file.write(self.generateCode())
 
         return
