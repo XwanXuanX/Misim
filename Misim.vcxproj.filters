@@ -39,6 +39,9 @@
     <None Include="asm\hello_world.asm">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="asm\user_input.asm">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Text Include="LICENSE.txt" />

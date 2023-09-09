@@ -30,4 +30,4 @@ lab: 	add R4, R2, 0
 
 		jmp lab
 
-stop: end                   ; End of program
+stop:	end                 ; End of program
