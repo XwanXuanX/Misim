@@ -1303,13 +1303,13 @@ class Parser:
         # Order for segments: data -> extra -> text
         symbol_table.update(ds_st)
 
-        ds_size: int = self.ds.size()
+        ds_size: int = self.ds.size() if self.ds.size() > 0 else 1
         for label in es_st.keys():
             es_st[label] += ds_size
 
         symbol_table.update(es_st)
 
-        es_size: int = self.es.size()
+        es_size: int = self.es.size() if self.es.size() > 0 else 1
         for label in ts_st.keys():
             ts_st[label] = ts_st[label] + es_size + ds_size
 
