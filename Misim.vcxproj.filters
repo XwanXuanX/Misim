@@ -36,6 +36,9 @@
     <None Include="asm\addup_array.asm">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="asm\hello_world.asm">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Text Include="LICENSE.txt" />
