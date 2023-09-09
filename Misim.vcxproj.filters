@@ -33,6 +33,9 @@
     <None Include="uml\arch.drawio" />
     <None Include="style_guide.md" />
     <None Include="util\assembler.py" />
+    <None Include="asm\addup_array.asm">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Text Include="LICENSE.txt" />

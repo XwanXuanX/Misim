@@ -148,6 +148,7 @@
   <ItemGroup>
     <None Include=".gitattributes" />
     <None Include=".gitignore" />
+    <None Include="asm\addup_array.asm" />
     <None Include="style_guide.md" />
     <None Include="uml\arch.drawio" />
     <None Include="util\assembler.py" />
