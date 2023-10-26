@@ -32,8 +32,8 @@ void wain()
 
 	using core = pc::Core<system_bit, mem_size, syscall>;
 
-	core::Loader loader(std::filesystem::path("/home/wanxuan/data/Misim/x64/program.bin"));
-	tr::Tracer trace("/home/wanxuan/data/Misim/x64/run_log.csv");
+	core::Loader loader(std::filesystem::path("/home/tonyli/Desktop/Misim/x64/program.bin"));
+	tr::Tracer trace("/home/tonyli/Desktop/Misim/x64/run_log.csv");
 
 	loader.parseBinaryFile();
 
