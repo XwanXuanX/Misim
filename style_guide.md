@@ -111,3 +111,71 @@
 * If parameters are split, type names should be aligned, parameter names should be aligned, and commas should be aligned;
 * The closing bracket (`>` or `)`) should be aligned with commas, but one space to the right;
 * Attributes, qualifiers, and specifiers should follow immediately after the closing brackets;
+
+
+### Class Section Separation
+#### Style
+* Guideline:
+    ```cpp
+    class C
+    {
+    public:
+        // Type aliasing (using/typedef declarations)
+        // public constants (const specified variable)
+        // Maybe: static member variables
+
+    public:
+        // special class member functions
+        // e.g. ctor, dtor, move/copy ctor, move/copy optor
+
+    public:
+        // public methods
+
+    private:
+        // private helper functions
+
+    public:
+        // non-static public member variables
+
+    protected:
+        // non-static protected member variables
+
+    private:
+        // non-static private member variables
+    };
+    ```
+#### Explanation
+* Class is consists of many sections.
+* Member access specifiers (aka. Labels) should be used to separate different sections.
+* DO NOT use comments to separate.
+
+
+### Constructor
+#### Style
+* Guideline:
+    ```
+    <explicit template> <attributes> <specifiers>
+    name(<parameter list>)
+        : <var1>{ <initial value> }
+        , <var2>{ <initial value> }
+        , <var2>{ <initial value> }
+    {
+        // code
+    }
+    ```
+* Example:
+    ```cpp
+    template <std::unsigned_integral UINT> [[nodiscard]] constexpr explicit
+    Shape(const UINT width, const UINT height) noexcept(false)
+        : m_width { width  }
+        , m_height{ height }
+    {
+        // Perform some error checking on inputs
+        if (m_width < 0 || m_height < 0)
+        {
+            throw std::runtime_error("Unexpected error!");
+        }
+    }
+    ```
+#### Explanation
+* Please strictly follow above guidelines!
