@@ -47,34 +47,38 @@ The design of the new instruction set follows several principles as listed below
 * ___User-friendly___
 * ___Implementation-friendly___
 
-#### Detailed explanations regarding each principle
-
-__Completeness__ \
+#### Completeness
 According to Wikipedia, the formal definition for Turing completeness is:
 > A computational system that can compute every Turing-computable function is called Turing-complete (or Turing-powerful). Alternatively, such a system is one that can simulate a universal Turing machine.
 
 In other words, given infinitely many resources and time, one computer system should be able to compute anything. The new instruction set must be turing complete for it to be useful.
 
-__Compactness__ \
+#### Compactness
+Compactness measures to what extend an instruction set can be reduced and compressed, while maintaining its turing completeness. For instance, consider the instruction `SUB R1, R2, R3`. It can be decomposed into this sequence of instructions: `NOT R3, R3` $\rightarrow$ `ADD R3, R3, 1` $\rightarrow$ `ADD R1, R2, R3`. Similarly, the `PUSH` and `POP` instructions can also be decomposed and re-implemented. The subset of the full set of instruction that can be used to implement other instructions are called __Axiom Instruction__. The goal is to find the correct balance between __user-friendly__ and __implementation-friendly__, by adjusting the __non-axiom instructions__.
+
+#### User-friendly
+User-friendly defines how a instruction set is easy to use for users (users refer to compiler authors and software developers). Assume a turing complete instruction set; if so many basic operations need to be decomposed into many lines of axiom-instructions, it can be imagined that this instruction set must be difficult to use. For an extreme example, consider the one-instruction machine.
+
+#### Implementation-friendly
+Implementation-friendly defines how a instruction set is easy to be implemented for the processor designer. As illustrated by the graph below:
+* __CISC:__
+```mermaid
+flowchart LR
+    C1["Compiler (Simple)"] -- Code generation ---> P1["Processor (Complex)"]
+```
+* __RISC:__
+```mermaid
+flowchart LR
+    C2["Compiler (Complex)"] -- Code generation ---> P2["Processor (Simple)"]
+```
+Obviously, the more complex the instruction set, the more complex the processor architecture. On the other hand, although simpler (reduced) instruction set requires less complex processor hardware, it imposes more burden on the compiler author and software developers. Due to the lack of hardware and processor design knowledge, I decided to make the new instruction set as minimal as possible, while not compromising usability.
 
 
 
 
 
 
-
-
-__User-friendly__
-
-__Implementation-friendly__
-
-
-
-
-
-
-
-
+## Something else
 
 Below is a full reference of existing (old) instruction set:
 
