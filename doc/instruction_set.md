@@ -111,6 +111,10 @@ Below is a full reference of proposed new instruction set:
 | __ori__ | rd, rs1, imm[11:0] | I | Bitwise `OR` with immediate |
 | __xori__ | rd, rs1, imm[11:0] | I | Bitwise `XOR` with immediate |
 | __sltiu__ | rd, rs1, imm[11:0] | I | Set if less than immediate, unsigned |
+| __rll__ | rd, rs1, rs2 | R | Rotate left logical by register |
+| __rlli__ | rd, rs1, imm[4:0] | I | Rotate left logical by immediate |
+| __rrl__ | rd, rs1, rs2 | R | Rotate right logical by register |
+| __rrli__ | rd, rs1, imm[4:0] | I | Rotate right logical by immediate |
 
 #### Load & Store
 | Opcode | Operands | Type | Explanation |
@@ -134,44 +138,12 @@ Below is a full reference of proposed new instruction set:
 | __bltu__ | rs1, rs2, imm[12:1] | SB | Branch if less than, unsigned |
 | __bge__ | rs1, rs2, imm[12:1] | SB | Branch if greater or equal, 2's complement |
 | __bgeu__ | rs1, rs2, imm[12:1] | SB | Branch if greater or equal, unsigned |
+| __bz__ | imm[31:12] | U | Branch if Z flag set |
+| __bc__ | imm[31:12] | U | Branch if C flag set |
+| __bv__ | imm[31:12] | U | Branch if V flag set |
+| __bn__ | imm[31:12] | U | Branch if N flag set |
 
 #### System instruction
 | Opcode | Operands | Type | Explanation |
 | :----- | :------- | :--- | :---------- |
 | __scall__ | N/A | I | System call |
-
-
-
-
-
-
-
-
-## Something else
-
-Below is a full reference of existing (old) instruction set:
-
-| Opcode              | Explanation               | Semantics                     | Type  |
-| :------------------ | :------------------------ | :-------------------------    |:----- |
-| __ADD__             |   add two operands        | _R1 $\leftarrow$ R2 + R3/imm_ |  R/I  |
-| __UMUL__            |   multiple two operands   | _R1 $\leftarrow$ R2 * R3/imm_ |  R/I  |
-| __UDIV__            |   divide two operands     | _R1 $\leftarrow$ R2 / R3/imm_ |  R/I  |
-| __UMOL__            |   op1 % op2               | _R1 $\leftarrow$ R2 % R3/imm_ |  R/I  |
-| __AND__             |   bitwise And of A & B    | _R1 $\leftarrow$ R2 & R3/imm_ |  R/I  |
-| __ORR__             |   bitwise Or of A & B     | _R1 $\leftarrow$ R2 \| R3/imm_|  R/I  |
-| __XOR__             |   bitwise Xor of A & B    | _R1 $\leftarrow$ R2 ^ R3/imm_ |  R/I  |
-| __SHL__             |   logical shift left      | _R1 $\leftarrow$ R2 << R3/imm_|  R/I  |
-| __SHR__             |   logical shift right     | _R1 $\leftarrow$ R2 >> R3/imm_|  R/I  |
-| __RTL__             |   logical rotate left     | _R1 $\leftarrow$ R2 <~ R3/imm_|  R/I  |
-| __RTR__             |   logical rotate right    | _R1 $\leftarrow$ R2 ~> R3/imm_|  R/I  |
-| __NOT__             |   comp all the bits       | _R1 $\leftarrow$ ~R2_         |  U    |
-| __LDR__             |   load reg from mem       | _R1 $\leftarrow$ [R2]_        |  U    |
-| __STR__             |   store reg in mem        | _[R1] $\leftarrow$ R2_        |  U    |
-| __PUSH__            |   push reg onto stack     | _[SP - 4] $\leftarrow$ R1_    |  S    |
-| __POP__             |   pop top ele into reg    | _R1 $\leftarrow$ [SP] + 4_    |  S    |
-| __JMP__             |   unconditional jump      | _N/A_                         |  J    |
-| __JZ__              |   jump if Z flag is set   | _N/A_                         |  J    |
-| __JC__              |   jump if C flag is set   | _N/A_                         |  J    |
-| __JV__              |   jump if V flag is set   | _N/A_                         |  J    |
-| __JZN__             |   jump if Z or N is set   | _N/A_                         |  J    |
-| __JN__              |   jump if N flag is set   | _N/A_                         |  J    |
