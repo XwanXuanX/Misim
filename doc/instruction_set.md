@@ -74,6 +74,75 @@ flowchart LR
 Obviously, the more complex the instruction set, the more complex the processor architecture. On the other hand, although simpler (reduced) instruction set requires less complex processor hardware, it imposes more burden on the compiler author and software developers. Due to the lack of hardware and processor design knowledge, I decided to make the new instruction set as minimal as possible, while not compromising usability.
 
 
+## New instruction set
+Below is a full reference of proposed new instruction set:
+
+#### Arithmetic
+| Opcode | Operands | Type | Explanation |
+| :----- | :------- | :--- | :---------- |
+| __add__ | rd, rs1, rs2 | R | Add registers |
+| __sub__ | rd, rs1, rs2 | R | Subtract registers |
+| __sra__ | rd, rs1, rs2 | R | Shift right arithmetic by register |
+| __slt__ | rd, rs1, rs2 | R | Set if less than register, 2's complement |
+| __addi__ | rd, rs1, imm[11:0] | I | Add immediate |
+| __srai__ | rd, rs1, imm[4:0] | I | Shift right arithmetic by immediate |
+| __slti__ | rd, rs1, imm[11:0] | I | Set if less than immediate, 2's complement |
+| __mul__ | rd, rs1, rs2 | R | Multiply and return lower bits |
+| __mulh__ | rd, rs1, rs2 | R | Multiply signed and return upper bits |
+| __mulhu__ | rd, rs1, rs2 | R | Multiply unsigned and return upper bits |
+| __mulhsu__ | rd, rs1, rs2 | R | Multiply signed-unsigned and return upper bits |
+| __div__ | rd, rs1, rs2 | R | Signed division |
+| __divu__ | rd, rs1, rs2 | R | Unsigned division |
+| __rem__ | rd, rs1, rs2 | R | Signed remainder |
+| __remu__ | rd, rs1, rs2 | R | Unsigned remainder |
+
+#### Logical
+| Opcode | Operands | Type | Explanation |
+| :----- | :------- | :--- | :---------- |
+| __sll__ | rd, rs1, rs2 | R | Shift left logical by register |
+| __srl__ | rd, rs1, rs2 | R | Shift right logical by register |
+| __and__ | rd, rs1, rs2 | R | Bitwise `AND` with register |
+| __or__ | rd, rs1, rs2 | R | Bitwise `OR` with register |
+| __xor__ | rd, rs1, rs2 | R | Bitwise `XOR` with register |
+| __sltu__ | rd, rs1, rs2 | R | Set if less than register, unsigned |
+| __slli__ | rd, rs1, imm[4:0] | I | Shift left logical by immediate |
+| __srli__ | rd, rs1, imm[4:0] | I | Shift right logical by immediate |
+| __andi__ | rd, rs1, imm[11:0] | I | Bitwise `AND` with immediate |
+| __ori__ | rd, rs1, imm[11:0] | I | Bitwise `OR` with immediate |
+| __xori__ | rd, rs1, imm[11:0] | I | Bitwise `XOR` with immediate |
+| __sltiu__ | rd, rs1, imm[11:0] | I | Set if less than immediate, unsigned |
+
+#### Load & Store
+| Opcode | Operands | Type | Explanation |
+| :----- | :------- | :--- | :---------- |
+| __lui__ | rd, imm[31:12] | U | Load upper immediate |
+| __lb__ | rd, imm[11:0] / rs1 | I | Load byte, signed (sign-extend) |
+| __lbu__ | rd, imm[11:0] / rs1 | I | Load byte, unsigned (zero-extend) |
+| __lh__ | rd, imm[11:0] / rs1 | I | Load half-word, signed (sign-extend) |
+| __lhu__ | rd, imm[11:0] / rs1 | I | Load half-word, unsigned (zero-extend) |
+| __lw__ | rd, imm[11:0] / rs1 | I | Load word |
+| __sb__ | rs2, imm[11:0] / rs1 | S | Store byte |
+| __sh__ | rs2, imm[11:0] / rs1 | S | Store half-word |
+| __sw__ | rs2, imm[11:0] / rs1 | S | Store word |
+
+#### Control Flow
+| Opcode | Operands | Type | Explanation |
+| :----- | :------- | :--- | :---------- |
+| __beq__ | rs1, rs2, imm[12:1] | SB | Branch if equal |
+| __bne__ | rs1, rs2, imm[12:1] | SB | Branch if not equal |
+| __blt__ | rs1, rs2, imm[12:1] | SB | Branch if less than, 2's complement |
+| __bltu__ | rs1, rs2, imm[12:1] | SB | Branch if less than, unsigned |
+| __bge__ | rs1, rs2, imm[12:1] | SB | Branch if greater or equal, 2's complement |
+| __bgeu__ | rs1, rs2, imm[12:1] | SB | Branch if greater or equal, unsigned |
+
+#### System instruction
+| Opcode | Operands | Type | Explanation |
+| :----- | :------- | :--- | :---------- |
+| __scall__ | N/A | I | System call |
+
+
+
+
 
 
 
@@ -106,4 +175,3 @@ Below is a full reference of existing (old) instruction set:
 | __JV__              |   jump if V flag is set   | _N/A_                         |  J    |
 | __JZN__             |   jump if Z or N is set   | _N/A_                         |  J    |
 | __JN__              |   jump if N flag is set   | _N/A_                         |  J    |
-| __SYSCALL__         |   invokes system calls    | _N/A_                         |  J    |
