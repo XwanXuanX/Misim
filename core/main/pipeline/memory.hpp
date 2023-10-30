@@ -12,10 +12,8 @@
 
 namespace pipeline::memory
 {
-    using byte_type = std::uint_fast8_t;
-
+    using byte_type = std::uint8_t;
     static_assert(
-        sizeof(byte_type) == 1u &&
         sizeof(byte_type) * CHAR_BIT == 8u,
         "Invalid byte_type / CHAR_BIT."
     );
@@ -33,24 +31,28 @@ namespace pipeline::memory
 
     public:
         [[nodiscard]] inline constexpr
-        bool checkAddrInRange(const std::unsigned_integral auto addr) const noexcept
+        auto checkAddrInRange(const std::unsigned_integral auto addr) const noexcept
+            -> bool
         {
             assert(m_memory.size() == m_memory_size);
-            return addr >=0 && addr < m_memory_size;
+            return addr >= 0 && addr < m_memory_size;
         }
 
         constexpr
-        std::variant<bool, std::domain_error>
-        write(const slot_type data, const std::unsigned_integral auto addr)
+        auto write(const slot_type data, const std::unsigned_integral auto addr)
+            -> std::variant<bool, std::domain_error>
         {
             if (!checkAddrInRange(addr))
             {
                 return std::domain_error("addr outside of valid range.");
             }
 
-            if constexpr (sizeof(slot_type) > 8u) {
+            if constexpr (sizeof(slot_type) > 8u)
+            {
                 m_memory[addr] = std::move(data);
-            } else {
+            }
+            else
+            {
                 m_memory[addr] = data;
             }
 
@@ -58,8 +60,8 @@ namespace pipeline::memory
         }
 
         [[nodiscard]] constexpr
-        std::variant<slot_type, std::domain_error>
-        read(const std::unsigned_integral auto addr)
+        auto read(const std::unsigned_integral auto addr) const
+            -> std::variant<slot_type, std::domain_error>
         {
             if (!checkAddrInRange(addr))
             {
@@ -70,11 +72,12 @@ namespace pipeline::memory
         }
 
         inline constexpr
-        void clear() noexcept
+        auto clear() noexcept
+            -> void
         {
             m_memory.fill(0u);
         }
-        
+
     private:
         model_type m_memory{};
     };
