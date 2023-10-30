@@ -147,3 +147,32 @@ Below is a full reference of proposed new instruction set:
 | Opcode | Operands | Type | Explanation |
 | :----- | :------- | :--- | :---------- |
 | __scall__ | N/A | I | System call |
+
+
+## New instruction encodings
+
+Encodings should be implementations-defined.
+
+
+## Differences between the new and the old
+
+There are many obvious differences that can be seen between the new and the old instruction set.
+* __Better signed and unsigned support__: In the new instruction set, most arithmetic and logical operations have both signed and unsigned variations, whereas the old instruction set only have the unsigned version.
+* __Better identification of register or immediate operand__: In the new instruction set, most arithmetic and logical operations have both register and immediate variations. The immediate variation is obtained by appending `i` to the register variation. This change makes the development of software easier.
+* __Better naming__: The instructions in the new instruction set uses better naming that deliver clearer meaning to the user.
+* __More intuitive branch instructions__: New instruction set introduces 6 new compare-and-branch instructions, which makes software development easier.
+* __More load and store options__: Due to the fundamental changes in the memory model, the load and store in the old instruction set is insufficient. The new instruction set introduces more variations (options) for load and store, which allow user to load / store different length of data.
+
+
+## Future improvements
+
+So, what can be done to improve in the future?
+
+Well, there are a few:
+* __Floating point__: Floating point is essential for serious real-life development. The current instruction set and computer architecture does not count for floating point types and their operations. Therefore, support for floating point types should be considered to be added.
+* __Atomic operations__: In multi-threading environment, atomic operations are essential to prevent data race. Atomic operations require hardware support. The current instruction set and computer architecture does not count for multi-threading environment, which is a huge drawback.
+
+
+## Appendix
+
+Skipped for now...
