@@ -15,12 +15,17 @@
  *
  *********************************************************************/
 
+#pragma once
+
 
 #include "core.hpp"
 #include "loader.hpp"
+#include <optional>
 
 
-void wain()
+using parameter_type = std::optional<std::string>;
+
+void wain(parameter_type&& binary, parameter_type&& log)
 {
 	namespace pc = ::prototype::core;
 	namespace ps = ::prototype::syscall;
@@ -32,17 +37,36 @@ void wain()
 
 	using core = pc::Core<system_bit, mem_size, syscall>;
 
-	core::Loader loader(std::filesystem::path("/home/tonyli/Desktop/Misim/x64/program.bin"));
-	tr::Tracer trace("/home/tonyli/Desktop/Misim/x64/run_log.csv");
+	if (!binary.has_value())
+	{
+		throw std::runtime_error("Invalid parameter.");
+	}
 
+	core::Loader loader(std::filesystem::path(std::move(binary.value())));
 	loader.parseBinaryFile();
 
-	core my_core{ loader.getSegments(), &trace };
+	if (log.has_value())
+	{
+		tr::Tracer trace(std::move(log.value()));
 
-	my_core.dataLoader<core::Loader::data_type>(loader.getData());
-	my_core.instructionLoader<core::Loader::instruction_type>(loader.getInstruction());
+		core my_core{ loader.getSegments(), &trace };
 
-	my_core.run();
+		my_core.dataLoader<core::Loader::data_type>(loader.getData());
+		my_core.instructionLoader<core::Loader::instruction_type>(loader.getInstruction());
+
+		my_core.run();
+	}
+	else
+	{	
+		core my_core{ loader.getSegments(), nullptr };
+
+		my_core.dataLoader<core::Loader::data_type>(loader.getData());
+		my_core.instructionLoader<core::Loader::instruction_type>(loader.getInstruction());
+
+		my_core.run();
+	}
+
+	return;
 }
 
 
