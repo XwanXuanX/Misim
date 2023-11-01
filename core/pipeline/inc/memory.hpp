@@ -42,8 +42,8 @@ namespace pipeline::memory
             array_model, vector_model
         >;
 
-        const size_type m_memory_size = MemorySize_;
-        const size_type m_memory_width = sizeof(slot_type) * CHAR_BIT;
+        const size_type m_memory_size { MemorySize_ };
+        const size_type m_memory_width{ sizeof(slot_type) * CHAR_BIT };
     
     public:
         [[nodiscard]] explicit constexpr
