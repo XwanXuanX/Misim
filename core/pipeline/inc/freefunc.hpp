@@ -63,7 +63,7 @@ namespace pipeline::freefunc
     }
 
     [[nodiscard]] static constexpr
-    auto testBitAll(const std::unsigned_integral auto n, const std::size_t last_bits) noexcept
+    auto testBitAll(const std::unsigned_integral auto n, const std::integral auto last_bits) noexcept
         -> std::variant<bool, std::domain_error>
     {
         if (!freefunc::checkBitInRange(n, last_bits)) {
@@ -86,7 +86,7 @@ namespace pipeline::freefunc
     }
 
     [[nodiscard]] constexpr
-    auto testBitAny(const std::unsigned_integral auto n, const std::size_t last_bits) noexcept
+    auto testBitAny(const std::unsigned_integral auto n, const std::integral auto last_bits) noexcept
         -> std::variant<bool, std::domain_error>
     {
         if (!freefunc::checkBitInRange(n, last_bits)) {
@@ -125,7 +125,7 @@ namespace pipeline::freefunc
     }
 
     [[nodiscard]] constexpr
-    auto testBitNone(const std::unsigned_integral auto n, const std::size_t last_bits)
+    auto testBitNone(const std::unsigned_integral auto n, const std::integral auto last_bits)
         -> std::variant<bool, std::domain_error>
     {
         static_assert(valid_variant_type<decltype(freefunc::testBitAny(n, last_bits))>);
