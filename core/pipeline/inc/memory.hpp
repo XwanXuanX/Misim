@@ -82,7 +82,7 @@ namespace pipeline::memory
       return addr >= 0 && addr < getMemorySize();
     }
 
-    constexpr return_type<bool> write(const slot_type data, const std::integral auto addr)
+    return_type<bool> write(const slot_type data, const std::integral auto addr)
     {
       if (!checkAddrInRange(addr)) {
         return std::domain_error("invalid range addr");
