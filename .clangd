@@ -1,0 +1,6 @@
+CompileFlags:
+  Add: [-Wall, -std=c++23]
+  Compiler: g++
+
+Hover:
+  ShowAKA: Yes
