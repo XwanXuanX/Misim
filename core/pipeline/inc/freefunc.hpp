@@ -30,7 +30,7 @@ namespace pipeline::freefunc
   using return_bool_t = return_type<bool>;
 
   template <std::unsigned_integral U>
-  [[nodiscard]] constexpr return_bool_t testBit(const U n, const std::integral auto pos) noexcept
+  [[nodiscard]] return_bool_t testBit(const U n, const std::integral auto pos) noexcept
   {
     if (!freefunc::checkBitInRange(n, pos)) {
       return std::domain_error("pos out of range");
@@ -39,7 +39,7 @@ namespace pipeline::freefunc
     return static_cast<bool>(n & (static_cast<U>(1) << pos));
   }
 
-  [[nodiscard]] constexpr return_bool_t testBitAll(const std::unsigned_integral auto n) noexcept
+  [[nodiscard]] return_bool_t testBitAll(const std::unsigned_integral auto n) noexcept
   {
     const std::size_t n_size{ sizeof(n) * CHAR_BIT - 1 };
 
@@ -55,7 +55,7 @@ namespace pipeline::freefunc
     return (n & mask) == mask;
   }
 
-  [[nodiscard]] constexpr return_bool_t testBitAll(const std::unsigned_integral auto n,
+  [[nodiscard]] return_bool_t testBitAll(const std::unsigned_integral auto n,
     const std::integral auto last_bits) noexcept
   {
     if (!freefunc::checkBitInRange(n, last_bits)) {
@@ -70,12 +70,12 @@ namespace pipeline::freefunc
     return (n & mask) == mask;
   }
 
-  [[nodiscard]] constexpr return_bool_t testBitAny(const std::unsigned_integral auto n) noexcept
+  [[nodiscard]] return_bool_t testBitAny(const std::unsigned_integral auto n) noexcept
   {
     return static_cast<bool>(n);
   }
 
-  [[nodiscard]] constexpr return_bool_t testBitAny(const std::unsigned_integral auto n,
+  [[nodiscard]] return_bool_t testBitAny(const std::unsigned_integral auto n,
     const std::integral auto last_bits) noexcept
   {
     if (!freefunc::checkBitInRange(n, last_bits)) {
@@ -97,7 +97,7 @@ namespace pipeline::freefunc
     requires std::convertible_to<decltype(std::get<0>(param)), bool>;
   };
 
-  [[nodiscard]] constexpr return_bool_t testBitNone(const std::unsigned_integral auto n) noexcept
+  [[nodiscard]] return_bool_t testBitNone(const std::unsigned_integral auto n) noexcept
   {
     static_assert(valid_variant_type<decltype(freefunc::testBitAny(n))>);
 
@@ -108,7 +108,7 @@ namespace pipeline::freefunc
     }
   }
 
-  [[nodiscard]] constexpr return_bool_t testBitNone(const std::unsigned_integral auto n,
+  [[nodiscard]] return_bool_t testBitNone(const std::unsigned_integral auto n,
     const std::integral auto last_bits)
   {
     static_assert(valid_variant_type<decltype(freefunc::testBitAny(n, last_bits))>);
@@ -121,7 +121,7 @@ namespace pipeline::freefunc
   }
 
   template <std::unsigned_integral U>
-  constexpr return_bool_t setBit(std::add_lvalue_reference_t<U> n, const std::integral auto pos)
+  return_bool_t setBit(std::add_lvalue_reference_t<U> n, const std::integral auto pos)
   {
     if (!freefunc::checkBitInRange<U>(pos)) {
         return std::domain_error("pos out of range");
@@ -132,14 +132,14 @@ namespace pipeline::freefunc
   }
 
   template <std::unsigned_integral U>
-  constexpr return_bool_t setBit(std::add_lvalue_reference_t<U> n) noexcept
+  return_bool_t setBit(std::add_lvalue_reference_t<U> n) noexcept
   {
     n |= static_cast<U>(-1);
     return true;
   }
   
   template <std::unsigned_integral U>
-  constexpr return_bool_t resetBit(std::add_lvalue_reference_t<U> n, const std::integral auto pos)
+  return_bool_t resetBit(std::add_lvalue_reference_t<U> n, const std::integral auto pos)
   {
     if (!freefunc::checkBitInRange<U>(pos)) {
         return std::domain_error("pos our of range");
@@ -157,14 +157,14 @@ namespace pipeline::freefunc
     return true;
   }
 
-  constexpr return_bool_t resetBit(std::unsigned_integral auto& n) noexcept
+  return_bool_t resetBit(std::unsigned_integral auto& n) noexcept
   {
     n &= 0u;
     return true;
   }
 
   template <std::unsigned_integral U>
-  constexpr return_bool_t flipBit(std::add_lvalue_reference_t<U> n, const std::integral auto pos)
+  return_bool_t flipBit(std::add_lvalue_reference_t<U> n, const std::integral auto pos)
   {
     if (!freefunc::checkBitInRange<U>(pos)) {
         return std::domain_error("pos out of range");
@@ -174,7 +174,7 @@ namespace pipeline::freefunc
     return true;
   }
 
-  constexpr return_bool_t flipBit(std::unsigned_integral auto& n) noexcept
+  return_bool_t flipBit(std::unsigned_integral auto& n) noexcept
   {
     n = ~n;
     return true;
