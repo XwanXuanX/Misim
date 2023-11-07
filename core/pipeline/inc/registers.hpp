@@ -21,7 +21,8 @@ namespace pipeline::registers
 
   using string_type = typename Association::string_type;
 
-  [[nodiscard]] consteval string_type operator ""_r(const char* str_literal, [[maybe_unused]] const std::size_t len)
+  [[nodiscard]] consteval string_type operator ""_r(const char* str_literal,
+    [[maybe_unused]] const std::size_t len)
   {
     const std::unsigned_integral auto str_len{ std::string::traits_type::length(str_literal) };
 
@@ -71,7 +72,23 @@ namespace pipeline::registers
         }
       );
 
-      const std::unsigned_integral auto ssize{ reg_name.size() };
+      // Introspection
+      auto getSize = [&reg_name]() -> std::unsigned_integral auto {
+        if constexpr (std::is_same_v<std::remove_cvref_t<T>, std::string_view>) {
+          return reg_name.size();
+        } else {
+          for (std::size_t i{ 0 }; const auto ch : reg_name) {
+            if (ch == 0) {
+              return i;
+            }
+            ++i;
+          }
+
+          return reg_name.size();
+        }
+      };
+
+      const std::unsigned_integral auto ssize{ getSize() };
 
       if (ssize != 2 && ssize != 3) {
         return -1;
@@ -133,14 +150,6 @@ namespace pipeline::registers
       }
     }
   };
-
-
-
-
-
-
-
-
 
 
 }
