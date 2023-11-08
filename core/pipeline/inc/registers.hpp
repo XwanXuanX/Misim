@@ -6,6 +6,7 @@
 #include <concepts>
 #include <string>
 #include <stdexcept>
+#include <functional>
 
 
 namespace pipeline::registers
@@ -49,7 +50,7 @@ namespace pipeline::registers
 
   private:
     template <typename Arr, Association A, Association... As>
-    static consteval void getAssociation(std::add_lvalue_reference_t<Arr> arr, std::size_t index = 0)
+    static constexpr void getAssociation(std::add_lvalue_reference_t<Arr> arr, std::size_t index = 0)
     {
       static_assert(!std::same_as<Arr, void> && requires { arr[0u]; });
 
@@ -63,7 +64,7 @@ namespace pipeline::registers
     template <typename T>
       requires(std::is_same_v<std::remove_cvref_t<T>, std::string_view> ||
         std::is_same_v<std::remove_cvref_t<T>, string_type>)
-    [[nodiscard]] static consteval std::integral auto parseRegname(std::add_const_t<T> reg_name)
+    [[nodiscard]] static constexpr std::integral auto parseRegname(std::add_const_t<T> reg_name)
     {
       static_assert(
         requires {
@@ -109,7 +110,7 @@ namespace pipeline::registers
     }
 
   public:
-    [[nodiscard]] static consteval std::integral auto idx(const std::string_view reg_name)
+    [[nodiscard]] static constexpr std::integral auto idx(const std::string_view reg_name)
     {
       if constexpr (pack_size == 0) {
         return parseRegname<std::string_view>(reg_name);
@@ -151,5 +152,115 @@ namespace pipeline::registers
     }
   };
 
+  enum class Status : std::uint8_t
+  {
+    N,  // Negative
+    Z,  // Zero
+    C,  // Carry
+    V   // Overflow
+  };
 
+  template <typename M>
+  concept valid_register_mapping = requires {
+    { M::idx(std::string_view{}) } -> std::integral;
+  };
+
+  template <std::unsigned_integral GpWidth,
+    std::size_t GpSize_,
+    valid_register_mapping Mapping>
+  class Registers
+  {
+  public:
+    using gp_width_type = GpWidth;
+    using gp_model_type = std::array<gp_width_type, GpSize_>;
+
+    using psr_flag_type = bool;
+    using psr_model_type = std::array<psr_flag_type, 4>;
+
+    const std::size_t m_gp_size{ GpSize_ };
+    const std::size_t m_psr_size{ 4u };
+
+    using reg_mapping = Mapping;
+
+    template <typename T, typename Error = std::domain_error>
+    using return_ref_t = std::variant<std::reference_wrapper<T>, Error>;
+
+    template <typename T, typename Error = std::domain_error>
+    using return_val_t = std::variant<T, Error>;
+
+  private:
+    template <template <typename...> typename ReturnType, std::unsigned_integral ValType>
+    [[nodiscard]] constexpr ReturnType<ValType> getGpHelper(const auto reg_name)
+    {
+      auto getIndex = [&reg_name] -> std::integral auto {
+        if constexpr (std::convertible_to<std::remove_cvref_t<decltype(reg_name)>, int>) {
+          return reg_name;
+        } else if constexpr (std::same_as<std::remove_cvref_t<decltype(reg_name)>, std::string_view>) {
+          return reg_mapping::idx(reg_name);
+        } else {
+          return -1;
+        }
+      };
+
+      const std::integral auto index{ getIndex() };
+
+      if (index < 0 || index >= m_gp_size) {
+        return std::domain_error("invalid reg_name");
+      } else {
+        return m_gp.at(index);
+      }
+    }
+
+  public:
+    [[nodiscard]] constexpr return_ref_t<gp_width_type> getGeneralPurpose(const std::string_view reg_name)
+    {
+      return getGpHelper<return_ref_t, gp_width_type>(reg_name);
+    }
+
+    [[nodiscard]] constexpr return_ref_t<gp_width_type> getGeneralPurpose(const std::integral auto reg_name)
+    {
+      return getGpHelper<return_ref_t, gp_width_type>(reg_name);
+    }
+
+
+
+
+
+
+
+    [[nodiscard]] constexpr bool getProgramStatus(const std::integral auto flag_name) const noexcept
+    {
+
+    }
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  private:
+    gp_model_type m_gp{};
+    psr_model_type m_psr{};
+  };
 }
