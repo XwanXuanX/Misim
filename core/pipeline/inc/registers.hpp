@@ -222,42 +222,25 @@ namespace pipeline::registers
       return getGpHelper<return_ref_t, gp_width_type>(reg_name);
     }
 
-
-
-
-
-
-
-    [[nodiscard]] constexpr bool getProgramStatus(const std::integral auto flag_name) const noexcept
+    [[nodiscard]] constexpr psr_flag_type& getProgramStatus(const Status flag_name) noexcept
     {
+      return m_psr.at(static_cast<std::size_t>(flag_name));
+    }
+    
+    [[nodiscard]] constexpr
+    return_ref_t<psr_flag_type> getProgramStatus(const std::integral auto flag_name)
+    {
+      if (flag_name < 0 || flag_name >= m_psr_size) {
+        return std::domain_error("invalid flag_name");
+      }
 
+      return m_psr.at(flag_name);
     }
 
-
-
-
-
-
-
-  
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    constexpr void clearProgramStatus() noexcept
+    {
+      m_psr.fill(false);
+    }
 
   private:
     gp_model_type m_gp{};
