@@ -5,14 +5,14 @@ OUT_PATH=./misim
 # Option configurations
 CXX=g++
 CINC=-I./inc/
-CFLAGS=-fcoroutines -pthread -std=c++23
+CFLAGS=-fcoroutines -pthread -std=c++23 -Wall
 
 # Command line
 misim: $(MAIN_PATH)
 	$(CXX) -o $(OUT_PATH) $(MAIN_PATH) $(CINC) $(CFLAGS)
 
-# Clear
-clear:
+# Clean
+clean:
 	rm misim
 	rm *.bin
 	rm *.log
