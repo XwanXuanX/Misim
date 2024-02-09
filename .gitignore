@@ -46,6 +46,7 @@ Generated\ Files/
 
 # CMake generated files
 builds/
+core/builds/
 
 # MSTest test Results
 [Tt]est[Rr]esult*/
