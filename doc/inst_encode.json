@@ -1,155 +1,155 @@
 {
   "add" : {
-
+    "type" : "R"
   },
   "sub" : {
-
+    "type" : "R"
   },
   "sra" : {
-
+    "type" : "R"
   },
   "slt" : {
-
+    "type" : "R"
   },
   "addi" : {
-
+    "type" : "I"
   },
   "srai" : {
-
+    "type" : "I"
   },
   "slti" : {
-
+    "type" : "I"
   },
   "mul" : {
-
+    "type" : "R"
   },
   "mulh" : {
-
+    "type" : "R"
   },
   "mulhu" : {
-
+    "type" : "R"
   },
   "mulhsu" : {
-
+    "type" : "R"
   },
   "div" : {
-
+    "type" : "R"
   },
   "divu" : {
-
+    "type" : "R"
   },
   "rem" : {
-
+    "type" : "R"
   },
   "remu" : {
-
+    "type" : "R"
   },
   "sll" : {
-
+    "type" : "R"
   },
   "srl" : {
-
+    "type" : "R"
   },
   "and" : {
-
+    "type" : "R"
   },
   "or" : {
-
+    "type" : "R"
   },
   "xor" : {
-
+    "type" : "R"
   },
   "sltu" : {
-
+    "type" : "R"
   },
   "slli" : {
-
+    "type" : "I"
   },
   "srli" : {
-
+    "type" : "I"
   },
   "andi" : {
-
+    "type" : "I"
   },
   "ori" : {
-
+    "type" : "I"
   },
   "xori" : {
-
+    "type" : "I"
   },
   "sltiu" : {
-
+    "type" : "I"
   },
   "rll" : {
-
+    "type" : "R"
   },
   "rlli" : {
-
+    "type" : "I"
   },
   "rrl" : {
-
+    "type" : "R"
   },
   "rrli" : {
-
+    "type" : "I"
   },
   "lui" : {
-
+    "type" : "U"
   },
   "lb" : {
-
+    "type" : "I"
   },
   "lbu" : {
-
+    "type" : "I"
   },
   "lh" : {
-    
+    "type" : "I"
   },
   "lhu" : {
-
+    "type" : "I"
   },
   "lw" : {
-
+    "type" : "I"
   },
   "sb" : {
-
+    "type" : "S"
   },
   "sh" : {
-
+    "type" : "S"
   },
   "sw" : {
-
+    "type" : "S"
   },
   "beq" : {
-
+    "type" : "SB"
   },
   "bne" : {
-
+    "type" : "SB"
   },
   "blt" : {
-
+    "type" : "SB"
   },
   "bltu" : {
-
+    "type" : "SB"
   },
   "bge" : {
-
+    "type" : "SB"
   },
   "bgeu" : {
-
+    "type" : "SB"
   },
   "bz" : {
-
+    "type" : "U"
   },
   "bc" : {
-
+    "type" : "U"
   },
   "bv" : {
-
+    "type" : "U"
   },
   "bn" : {
-
+    "type" : "U"
   },
   "scall" : {
-
+    "type" : "I"
   }
 }
