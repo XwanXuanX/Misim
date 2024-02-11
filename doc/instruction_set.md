@@ -138,10 +138,6 @@ Below is a full reference of proposed new instruction set:
 | __bltu__ | rs1, rs2, imm[12:1] | SB | Branch if less than, unsigned |
 | __bge__ | rs1, rs2, imm[12:1] | SB | Branch if greater or equal, 2's complement |
 | __bgeu__ | rs1, rs2, imm[12:1] | SB | Branch if greater or equal, unsigned |
-| __bz__ | imm[31:12] | U | Branch if Z flag set |
-| __bc__ | imm[31:12] | U | Branch if C flag set |
-| __bv__ | imm[31:12] | U | Branch if V flag set |
-| __bn__ | imm[31:12] | U | Branch if N flag set |
 
 #### System instruction
 | Opcode | Operands | Type | Explanation |
