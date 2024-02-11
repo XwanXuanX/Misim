@@ -1,0 +1,303 @@
+{
+  "add" : {
+    "type" : "R",
+    "usage" : "Add registers",
+    "opcode" : "0110011",
+    "funct3" : "000",
+    "funct7" : "0000000"
+  },
+  "sub" : {
+    "type" : "R",
+    "usage" : "Subtract registers",
+    "opcode" : "0110011",
+    "funct3" : "000",
+    "funct7" : "0100000"
+  },
+  "sra" : {
+    "type" : "R",
+    "usage" : "Shift right arithmetic by register",
+    "opcode" : "0110011",
+    "funct3" : "101",
+    "funct7" : "0100000"
+  },
+  "slt" : {
+    "type" : "R",
+    "usage" : "Set if less than register, 2's complement",
+    "opcode" : "0110011",
+    "funct3" : "010",
+    "funct7" : "0000000"
+  },
+  "addi" : {
+    "type" : "I",
+    "usage" : "Add immediate",
+    "opcode" : "0010011",
+    "funct3" : "000"
+  },
+  "srai" : {
+    "type" : "I",
+    "usage" : "Shift right arithmetic by immediate",
+    "opcode" : "1010011",
+    "funct3" : "101"
+  },
+  "slti" : {
+    "type" : "I",
+    "usage" : "Set if less than immediate, 2's complement",
+    "opcode" : "0010011",
+    "funct3" : "010"
+  },
+  "mul" : {
+    "type" : "R",
+    "usage" : "Multiply and return lower bits",
+    "opcode" : "0110011",
+    "funct3" : "000",
+    "funct7" : "0000001"
+  },
+  "mulh" : {
+    "type" : "R",
+    "usage" : "Multiply signed and return upper bits",
+    "opcode" : "0110011",
+    "funct3" : "001",
+    "funct7" : "0000001"
+  },
+  "mulhu" : {
+    "type" : "R",
+    "usage" : "Multiply unsigned and return upper bits",
+    "opcode" : "0110011",
+    "funct3" : "011",
+    "funct7" : "0000001"
+  },
+  "mulhsu" : {
+    "type" : "R",
+    "usage" : "Multiply signed-unsigned and return upper bits",
+    "opcode" : "0110011",
+    "funct3" : "010",
+    "funct7" : "0000001"
+  },
+  "div" : {
+    "type" : "R",
+    "usage" : "Signed division",
+    "opcode" : "0110011",
+    "funct3" : "100",
+    "funct7" : "0000001"
+  },
+  "divu" : {
+    "type" : "R",
+    "usage" : "Unsigned division",
+    "opcode" : "0110011",
+    "funct3" : "101",
+    "funct7" : "0000001"
+  },
+  "rem" : {
+    "type" : "R",
+    "usage" : "Signed remainder",
+    "opcode" : "0110011",
+    "funct3" : "110",
+    "funct7" : "0000001"
+  },
+  "remu" : {
+    "type" : "R",
+    "usage" : "Unsigned remainder",
+    "opcode" : "0110011",
+    "funct3" : "111",
+    "funct7" : "0000001"
+  },
+  "sll" : {
+    "type" : "R",
+    "usage" : "Shift left logical by register",
+    "opcode" : "0110011",
+    "funct3" : "001",
+    "funct7" : "0000000"
+  },
+  "srl" : {
+    "type" : "R",
+    "usage" : "Shift right logical by register",
+    "opcode" : "0110011",
+    "funct3" : "101",
+    "funct7" : "0000000"
+  },
+  "and" : {
+    "type" : "R",
+    "usage" : "Bitwise AND with register",
+    "opcode" : "0110011",
+    "funct3" : "111",
+    "funct7" : "0000000"
+  },
+  "or" : {
+    "type" : "R",
+    "usage" : "Bitwise OR with register",
+    "opcode" : "0110011",
+    "funct3" : "110",
+    "funct7" : "0000000"
+  },
+  "xor" : {
+    "type" : "R",
+    "usage" : "Bitwise XOR with register",
+    "opcode" : "0110011",
+    "funct3" : "100",
+    "funct7" : "0000000"
+  },
+  "sltu" : {
+    "type" : "R",
+    "usage" : "Set if less than register, unsigned",
+    "opcode" : "0110011",
+    "funct3" : "011",
+    "funct7" : "0000000"
+  },
+  "slli" : {
+    "type" : "I",
+    "usage" : "Shift left logical by immediate",
+    "opcode" : "1010011",
+    "funct3" : "001"
+  },
+  "srli" : {
+    "type" : "I",
+    "usage" : "Shift right logical by immediate",
+    "opcode" : "1010011",
+    "funct3" : "100"
+  },
+  "andi" : {
+    "type" : "I",
+    "usage" : "Bitwise AND with immediate",
+    "opcode" : "0010011",
+    "funct3" : "000"
+  },
+  "ori" : {
+    "type" : "I",
+    "usage" : "Bitwise OR with immediate",
+    "opcode" : "0010011",
+    "funct3" : "110"
+  },
+  "xori" : {
+    "type" : "I",
+    "usage" : "Bitwise XOR with immediate",
+    "opcode" : "0010011",
+    "funct3" : "100"
+  },
+  "sltiu" : {
+    "type" : "I",
+    "usage" : "Set if less than immediate, unsigned",
+    "opcode" : "0010011",
+    "funct3" : "011"
+  },
+  "rll" : {
+    "type" : "R",
+    "usage" : "Rotate left logical by register",
+    "opcode" : "0110011",
+    "funct3" : "001",
+    "funct7" : "1000000"
+  },
+  "rlli" : {
+    "type" : "I",
+    "usage" : "Rotate left logical by immediate",
+    "opcode" : "1010011",
+    "funct3" : "000"
+  },
+  "rrl" : {
+    "type" : "R",
+    "usage" : "Rotate right logical by register",
+    "opcode" : "0110011",
+    "funct3" : "101",
+    "funct7" : "1000000"
+  },
+  "rrli" : {
+    "type" : "I",
+    "usage" : "Rotate right logical by immediate",
+    "opcode" : "1010011",
+    "funct3" : "111"
+  },
+  "lui" : {
+    "type" : "U",
+    "usage" : "Load upper immediate",
+    "opcode" : "0110111"
+  },
+  "lb" : {
+    "type" : "I",
+    "usage" : "Load byte, signed (sign-extend)",
+    "opcode" : "0000011",
+    "funct3" : "000"
+  },
+  "lbu" : {
+    "type" : "I",
+    "usage" : "Load byte, unsigned (zero-extend)",
+    "opcode" : "0000011",
+    "funct3" : "100"
+  },
+  "lh" : {
+    "type" : "I",
+    "usage" : "Load half-word, signed (sign-extend)",
+    "opcode" : "0000011",
+    "funct3" : "001"
+  },
+  "lhu" : {
+    "type" : "I",
+    "usage" : "Load half-word, unsigned (zero-extend)",
+    "opcode" : "0000011",
+    "funct3" : "101"
+  },
+  "lw" : {
+    "type" : "I",
+    "usage" : "Load word",
+    "opcode" : "0000011",
+    "funct3" : "010"
+  },
+  "sb" : {
+    "type" : "S",
+    "usage" : "Store byte",
+    "opcode" : "0100011",
+    "funct3" : "000"
+  },
+  "sh" : {
+    "type" : "S",
+    "usage" : "Store half-word",
+    "opcode" : "0100011",
+    "funct3" : "001"
+  },
+  "sw" : {
+    "type" : "S",
+    "usage" : "Store word",
+    "opcode" : "0100011",
+    "funct3" : "010"
+  },
+  "beq" : {
+    "type" : "SB",
+    "usage" : "Branch if equal",
+    "opcode" : "1100011",
+    "funct3" : "000"
+  },
+  "bne" : {
+    "type" : "SB",
+    "usage" : "Branch if not equal",
+    "opcode" : "1100011",
+    "funct3" : "001"
+  },
+  "blt" : {
+    "type" : "SB",
+    "usage" : "Branch if less than, 2's complement",
+    "opcode" : "1100011",
+    "funct3" : "100"
+  },
+  "bltu" : {
+    "type" : "SB",
+    "usage" : "Branch if less than, unsigned",
+    "opcode" : "1100011",
+    "funct3" : "110"
+  },
+  "bge" : {
+    "type" : "SB",
+    "usage" : "Branch if greater or equal, 2's complement",
+    "opcode" : "1100011",
+    "funct3" : "101"
+  },
+  "bgeu" : {
+    "type" : "SB",
+    "usage" : "Branch if greater or equal, unsigned",
+    "opcode" : "1100011",
+    "funct3" : "111"
+  },
+  "scall" : {
+    "type" : "I",
+    "usage" : "System call",
+    "opcode" : "1110011",
+    "funct3" : "000"
+  }
+}
