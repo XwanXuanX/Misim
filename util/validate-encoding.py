@@ -194,11 +194,30 @@ def JSON2Dict(files: dict[str, str]) -> dict[str, dict]:
 # # # # # # # # # # #
 
 
+def testcase(func: Callable) -> Callable:
+    """ Testcase decorator. """
+    
+    def wrapper():
+        try:
+            func()
+        except AssertionError as ae:
+            logger.error(ae)
+            exitProgram(1)
+        except Exception as e:
+            logger.error(f"Unexpected exception: {e}")
+            exitProgram(1)
+        
+        # If no exception occures
+        logger.info(f"{func.__doc__} - Passed!")
+
+    return wrapper
+
+
+@testcase
 def TC1():
     """ Check all instruction types defined in inst_definition has a corresponding encoding. """
     
-    inst_types: set = { t for t in encoding.keys() }
-    print(inst_types)
+    
 
         
     
