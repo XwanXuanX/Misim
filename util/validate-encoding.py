@@ -189,6 +189,16 @@ def JSON2Dict(files: dict[str, str]) -> dict[str, dict]:
     return results
 
 
+# # # # # # # # # # #
+#     Testcases
+# # # # # # # # # # #
+
+
+def TC1():
+    """ Check all instruction types defined in inst_definition has a corresponding encoding. """
+    
+    inst_types: set = { t for t in encoding.keys() }
+    print(inst_types)
 
         
     
@@ -229,6 +239,8 @@ def main():
         return
     
     # Testcases
+    
+    TC1()
 
 
 
