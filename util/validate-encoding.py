@@ -217,7 +217,18 @@ def testcase(func: Callable) -> Callable:
 def TC1():
     """ Check all instruction types defined in inst_definition has a corresponding encoding. """
     
+    inst_type = set(encoding.keys())
     
+    assert len(inst_type) == len(encoding.keys()), "Instruction type is not uniquely defined."
+    
+    for k, v in definition.items():
+        assert isinstance(v, dict), f"Instruction {k} is not of dictionary type."
+        assert v.get("type") in inst_type, f"Instruction {k} type is not defined in encoding.json."
+
+
+@testcase
+def TC2():
+    """  """
 
         
     
