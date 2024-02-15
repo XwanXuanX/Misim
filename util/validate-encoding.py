@@ -207,7 +207,7 @@ def testcase(func: Callable) -> Callable:
             logger.error(f"Unexpected exception: {e}")
             exitProgram(1)
         
-        # If no exception occures
+        # If no exception occurs
         logger.info(f"{func.__doc__} - Passed!")
 
     return wrapper
@@ -222,13 +222,110 @@ def TC1():
     assert len(inst_type) == len(encoding.keys()), "Instruction type is not uniquely defined."
     
     for k, v in definition.items():
-        assert isinstance(v, dict), f"Instruction {k} is not of dictionary type."
-        assert v.get("type") in inst_type, f"Instruction {k} type is not defined in encoding.json."
+        assert isinstance(v, dict), \
+               f"Instruction {k} is not of dictionary type."
+        
+        assert v.get("type") in inst_type, \
+               f"Instruction {k} type is not defined in encoding.json."
+    
+    return
 
 
 @testcase
 def TC2():
-    """  """
+    """ Check all instructions' opcodes and funct3/7 defined in inst_definition are unique. """
+
+    """
+    There are 3 things that differ from instructions: opcode, funct3, and funct7.
+
+    How to validate for uniqueness?
+
+    For example, an instruction only has opcode and funct3.
+    Then we should be able to tell it apart from the rest of instructions only based on opcode and funct3.
+
+    Do that for every single instruction.
+
+    """
+
+    for k, v in definition.items():
+        # 3 cases (v contain only opcode, both opcode and funct3, and all 3 identifiers)
+
+        assert isinstance(v, dict), f"Instruction {k} is not of dictionary type."
+
+        # Case 3
+        if "funct7" in v:
+            assert "funct3" in v and "opcode" in v, \
+                   f"Instruction {k} has funct7, but doesn't have funct3 or opcode"
+            
+            # The opcode, funct7, and funct3 combined should uniquely identify that instruction
+            encounter: int = 0
+
+            for encoding in definition.values():
+                # Concat checker's opcode, funct3, and funct7
+                checker = v.get("funct7") + v.get("funct3") + v.get("opcode")
+                # Concat target's opcode, funct3, and funct7
+                # Assumption: ALL instruction MUST have the opcode section!
+                assert "opcode" in encoding, "Some instruction doesn't contain opcode!"
+                if "funct7" not in encoding:
+                    continue
+                
+                target = encoding.get("funct7")   \
+                         + encoding.get("funct3") \
+                         + encoding.get("opcode")
+                
+                if checker == target:
+                    encounter += 1
+            
+            assert encounter == 1, \
+                   f"funct7, funct3, and opcode does not uniquely identify instruction {k}"
+
+        # Case 2
+        elif "funct3" in v:
+            assert "funct7" not in v and "opcode" in v, \
+                   f"Instruction {k} has funct3, but has funct7 or doesn't have opcode"
+            
+            # The opcode and funct3 combined should uniquely identify that instruction
+            encounter: int = 0
+
+            for encoding in definition.values():
+                # Concat checker's opcode and funct3
+                checker = v.get("funct3") + v.get("opcode")
+                # Concat target's opcode and funct3
+                # Assumption: ALL instruction MUST have the opcode section!
+                assert "opcode" in encoding, "Some instruction doesn't contain opcode!"
+                # But if the target doesn't have funct3, it will be checked in the
+                # next 'elif' clause, which is still okay.
+                if "funct3" not in encoding:
+                    continue
+                
+                target = encoding.get("funct3") + encoding.get("opcode")
+
+                if checker == target:
+                    encounter += 1
+            
+            assert encounter == 1, \
+                   f"funct3 & opcode does not uniquely identify instruction {k}"
+
+        # Case 1
+        elif "opcode" in v:
+            assert "funct3" not in v and "funct7" not in v, \
+                   f"Instruction {k} has opcode, but has funct3 or funct7"
+
+            # Only the opcode should uniquely identify that instruction
+            encounter: int = 0
+
+            for encoding in definition.values():
+                # Assumption: ALL instruction MUST have the opcode section!
+                assert "opcode" in encoding, "Some instruction doesn't contain opcode!"
+
+                if v.get("opcode") == encoding.get("opcode"):
+                    encounter += 1
+            
+            assert encounter == 1, \
+                   f"Only the opcode does not uniquely identify instruction {k}"
+    
+    return
+
 
         
     
@@ -271,6 +368,7 @@ def main():
     # Testcases
     
     TC1()
+    TC2()
 
 
 
