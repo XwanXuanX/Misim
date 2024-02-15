@@ -327,14 +327,46 @@ def TC2():
     return
 
 
+@testcase
+def TC3():
+    """ Check all instruction definitions follows the format defined in inst_encodings.json. """
+
+    for k, v in definition.items():
+        assert isinstance(v, dict), f"Instruction {k} is not of dictionary type."
+
+        inst_type = v.get("type")
+        assert inst_type in encoding, \
+               f"Unknown instruction type {inst_type} for instruction {k}"
         
-    
+        details: dict = encoding.get(inst_type)
 
+        def checkExists(entry: str) -> None:
+            if entry in v:
+                assert entry in details, \
+                       f"{entry} in {k}, but is not defined in {inst_type}"
+                
+                # Check for encoding length
+                check_len: int = len(v.get(entry))
 
+                ran = details.get(entry)
+                assert isinstance(ran, list) and len(ran) == 2, \
+                       f"Unexpected format to specify encoding of type {inst_type}"
+                
+                target_len: int = ran[1] - ran[0] + 1
 
+                assert check_len == target_len, \
+                       f"{entry} length does not match for {k} and it's encoding."
+
+            else:
+                assert entry not in details, \
+                       f"{entry} not in {k}, but is defined in {inst_type}"
         
+        # Now check for 3 instruction identifiers
+        checkExists("opcode")
+        checkExists("funct3")
+        checkExists("funct7")
 
-
+    return
 
 
 def main():
@@ -366,15 +398,11 @@ def main():
         return
     
     # Testcases
-    
     TC1()
     TC2()
+    TC3()
 
-
-
-
-
-
+    return
 
 
 if __name__ == "__main__":
