@@ -159,7 +159,7 @@
     "type" : "I",
     "usage" : "Bitwise AND with immediate",
     "opcode" : "0010011",
-    "funct3" : "000"
+    "funct3" : "111"
   },
   "ori" : {
     "type" : "I",
